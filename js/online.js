@@ -259,7 +259,10 @@
     const html = x => x.sys ? `<div class="sys">${esc(x.text)}</div>` : `<div><b>${esc(x.name)}:</b> ${esc(x.text)}</div>`;
     lobbyLog.innerHTML = chatLines.slice(-30).map(html).join(''); lobbyLog.scrollTop = 1e6;
     $('chatLog').innerHTML = chatLines.slice(-6).map(html).join('');
+    if (O.onChat) O.onChat(m); // touch chat panel (js/touch.js)
   }
+  O.chatLines = chatLines;
+  O.sendChat = text => { const v = String(text || '').trim().slice(0, 200); if (!v) return false; send({ t: 'chat', text: v }); return true; };
   window.addEventListener('keydown', e => {
     if (!O.inGame || e.target.tagName === 'INPUT') return;
     if (e.key === 't' || e.key === 'T') { e.preventDefault(); $('chatInput').focus(); }

@@ -1541,7 +1541,8 @@ class Game {
     }
 
     // banner
-    if (this.banner) {
+    if (this.banner && this.touchBar) this.drawTouchBanner(ctx); // touch: one clean "who's playing" line (js/touch.js)
+    else if (this.banner) {
       const a = clamp(this.banner.t / 0.5, 0, 1);
       ctx.globalAlpha = a; ctx.textAlign = 'center';
       ctx.font = `bold 44px ${FONT}`; ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(0,0,0,0.75)';
@@ -1563,7 +1564,7 @@ class Game {
       ctx.strokeText(q.text.toUpperCase(), 0, 0); ctx.fillStyle = '#ffd84a'; ctx.fillText(q.text.toUpperCase(), 0, 0);
       ctx.restore();
     }
-    if (this.toastMsg) {
+    if (this.toastMsg && !this.touchBar) { // touch: no event text under the weapon bar
       ctx.textAlign = 'center'; ctx.font = `bold 18px ${FONT}`; ctx.fillStyle = '#fff'; ctx.lineWidth = 4; ctx.strokeStyle = '#000';
       const ty = H - 80 - (this.viewPad ? this.viewPad.bot : 0); ctx.strokeText(this.toastMsg.text, W / 2, ty); ctx.fillText(this.toastMsg.text, W / 2, ty);
     }
@@ -1618,13 +1619,13 @@ class Game {
       ['◀ ▶ (hold)', 'Walk · STEPS meter = ~5 s of walking per turn'], ['Drag on the battlefield', 'Aim at your finger (drag farther = finer)'], ['Hold FIRE', 'Charge power — release to fire'],
       ['Hold JUMP', 'Charge a jump: tap = hop, hold ~1 s = big jump (1/turn)'], ['Hold FLIP', 'Charged backflip (higher, slightly back)'], ['Weapon bar (2 rows)', 'Tap an attack, defense, special or crate item'], ['Defense picked', 'FIRE uses it (lasts until your team\'s next turn)'],
       ['2 fingers (1 off-turn)', 'Pinch zoom · drag pan · tap minimap · ◎ recenter'],
-      ['⏸ · ? · 💬 · 3D/2D · ⛶', 'Menu / pause · help · chat (online) · view · full screen'],
+      ['⏸ · ? · 💬 · ⛶', 'Menu / pause · help · chat (online) · full screen'],
     ] : [
       ['← →', 'Walk'], ['↑ ↓', 'Aim angle'], ['Hold SPACE', 'Charge power — release to fire'],
       ['Hold ENTER', 'Charge a jump: tap = hop, hold ~1 s = big jump (1/turn)'], ['Hold BACKSPACE', 'Charged backflip (higher, slightly back)'], ['1 2 3  /  Q E', 'Attacks: Bazooka, Grenade, ★ special'], ['4 5', 'Defenses: Brace, ★ special — SPACE to use'],
       ['A D · drag · screen edge', 'Pan camera (← → ↑ ↓ too when not aiming) · C recenters'],
       ['Wheel  /  + −  /  0', 'Zoom in / out / reset · click the minimap to look there'],
-      ['P · H · M', 'Pause · this help · mute'], ['V', 'Toggle 3D / classic 2D view'],
+      ['P · H · M', 'Pause · this help · mute'], ['3D / 2D', 'View: chosen before the game (title screen / page 1)'],
     ];
     ctx.font = `bold 15px ${FONT}`;
     rows.forEach(([k, d], i) => {

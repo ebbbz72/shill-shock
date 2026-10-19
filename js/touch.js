@@ -48,10 +48,11 @@
 
   // ---------------------------------------------------------------- DOM
   function el(tag, cls, html, parent) { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; (parent || ui).appendChild(e); return e; }
-  let ui, bar, rotate, sheet;
+  let ui, bar, meters, rotate, sheet;
   function build() {
     ui = document.createElement('div'); ui.id = 'touchUI'; ui.className = 'hidden'; document.body.appendChild(ui);
     const left = el('div', 'tu-cl tu-left'), right = el('div', 'tu-cl tu-right'), util = el('div', 'tu-util'), util2 = el('div', 'tu-util tu-util2');
+    meters = el('div', 'tu-info', null, left); meters.id = 'tuMeters'; // angle / POWER / STEPS above the walk arrows
     const walk = el('div', 'tu-row', null, left);
     hold(el('button', 'tu-btn tu-walk', '◀', walk), 'ArrowLeft', 'walkL');
     hold(el('button', 'tu-btn tu-walk', '▶', walk), 'ArrowRight', 'walkR');
@@ -63,13 +64,13 @@
     tap(el('button', 'tu-btn tu-sm', '⏸', util), () => openSheet()).dataset.tu = 'menu';
     tap(el('button', 'tu-btn tu-sm', '◎', util), () => tapKey('c')).dataset.tu = 'recenter';
     tap(el('button', 'tu-btn tu-sm', '?', util2), () => tapKey('h')).dataset.tu = 'help';
-    tap(el('button', 'tu-btn tu-sm tu-txt', '3D/2D', util2), () => tapKey('v')).dataset.tu = 'view';
-    const chat = el('button', 'tu-btn tu-sm tu-chat', '💬', util2); chat.dataset.tu = 'chat';
+    const chat = el('button', 'tu-btn tu-sm tu-chat', '💬<i class="tu-badge hidden" id="tuChatBadge"></i>', util2); chat.dataset.tu = 'chat';
     if (FS.available()) tap(el('button', 'tu-btn tu-sm tu-fs', '⛶', util2), () => FS.toggle()).dataset.tu = 'fullscreen';
     T.util = util; T.util2 = util2;
     buildGameMode();
-    chat.addEventListener('click', () => { const i = $('chatInput'); if (i) i.focus(); }); // focus inside the tap: the on-screen keyboard opens
-    bar = el('div', 'tu-bar', '<div class="tu-brow tu-brow1"></div><div class="tu-brow tu-brow2"><div class="tu-info"></div><div class="tu-items"></div></div>');
+    chat.addEventListener('click', e => { noDefault(e); chatOpen(); }); // touch: the 💬 panel replaces the left chat log
+    buildChat();
+    bar = el('div', 'tu-bar', '<div class="tu-brow tu-brow1"></div><div class="tu-brow tu-brow2"><div class="tu-items"></div></div>');
     bar.id = 'tuBar'; bar.addEventListener('pointerdown', onBar); bar.addEventListener('contextmenu', noDefault);
     rotate = el('div', 'tu-rotate hidden', '<span>📱↻ Rotate your phone to landscape for a bigger battlefield</span><button aria-label="dismiss">✕</button>', document.body);
     rotate.querySelector('button').addEventListener('click', () => { T.rotateDismissed = true; rotate.classList.add('hidden'); });
@@ -223,7 +224,7 @@
       bar.querySelector('.tu-brow1').innerHTML = ws.slice(0, base).map((wid, i) => slotHtml(g, team, wid, i, base)).join('');
       const items = ws.slice(base);
       bar.querySelector('.tu-items').innerHTML = items.length ? items.map((wid, k) => slotHtml(g, team, wid, base + k, base)).join('')
-        : '<span class="tu-noitems">CRATE ITEMS: walk into a supply crate</span>';
+        : '';
     }
     const u = g.cur, w = WEAPONS[ws[team.weaponIdx]] || {}, jc = g.jumpCharge;
     const pv = jc ? jc.p : g.charging ? g.power : g.phase === 'fire' ? g.firedPower || 0 : 0;
@@ -232,10 +233,10 @@
     const isig = [w.kind, Math.round(u.aim), Math.round(pv * 50), jc ? (jc.back ? 'b' : 'j') : '', steps == null ? '' : Math.round(steps * 30), g.jumpsLeft, tags].join('|');
     if (isig !== infoSig) {
       infoSig = isig;
-      const top = w.kind === 'defense' ? '<b class="tu-def">DEFENSE · FIRE uses it</b>' : `<b>${Math.round(u.aim)}°</b> <span>${jc ? (jc.back ? 'FLIP' : 'JUMP') : 'POWER'}</span>`;
-      bar.querySelector('.tu-info').innerHTML = `<div class="tu-i1">${top}${g.jumpsLeft != null ? `<i class="${g.jumpsLeft > 0 ? 'ok' : ''}">${g.jumpsLeft > 0 ? 'JUMP✓' : 'JUMP✗'}</i>` : ''}${tags ? `<i class="ok">${tags}</i>` : ''}</div>` +
-        `<div class="tu-pw"><div class="${jc ? 'j' : ''}" style="width:${Math.round(pv * 100)}%"></div></div>` +
-        (steps != null ? `<div class="tu-st"><span>STEPS</span><div><div style="width:${Math.round(steps * 100)}%"></div></div></div>` : '');
+      const top = w.kind === 'defense' ? '<b class="tu-def">DEF · FIRE uses it</b>' : `<b>${Math.round(u.aim)}°</b>`;
+      meters.innerHTML = `<div class="tu-i1">${top}${g.jumpsLeft != null ? `<i class="${g.jumpsLeft > 0 ? 'ok' : ''}">${g.jumpsLeft > 0 ? 'JUMP✓' : 'JUMP✗'}</i>` : ''}${tags ? `<i class="ok">${tags}</i>` : ''}</div>` +
+        `<div class="tu-m"><span>${jc ? (jc.back ? 'FLIP' : 'JUMP') : 'POWER'}</span><div class="tu-pw"><div class="${jc ? 'j' : ''}" style="width:${Math.round(pv * 100)}%"></div></div></div>` +
+        (steps != null ? `<div class="tu-m tu-st"><span>${steps > 0 ? 'STEPS' : 'NO STEPS'}</span><div class="tu-sb"><div style="width:${Math.round(steps * 100)}%"></div></div></div>` : '');
     }
   }
   function pickWeapon(i) {
@@ -252,6 +253,52 @@
     if (b.classList.contains('empty') || !myTurn()) return;
     pickWeapon(+b.dataset.i); updateBar();
   }
+
+  // ---------------------------------------------------------------- 💬 chat panel (online, touch only; the left log is hidden)
+  let chatP = null, chatBack = null, unread = 0; const ownSent = [];
+  const escH = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  function buildChat() {
+    chatBack = el('div', 'tu-chatback hidden', '', document.body);
+    chatP = el('div', 'tu-chatp hidden', `<div class="tu-chath"><b>CHAT</b><button class="tu-chatx" aria-label="close chat">✕</button></div>
+      <div class="tu-chatlog" id="tuChatLog"></div>
+      <form class="tu-chatf"><input id="tuChatInput" maxlength="200" autocomplete="off" spellcheck="false" enterkeyhint="send" placeholder="Type a message"><button class="tu-chats" type="submit">SEND</button></form>`, document.body);
+    chatP.id = 'tuChat';
+    chatBack.addEventListener('pointerdown', e => { noDefault(e); chatClose(); });
+    chatP.querySelector('.tu-chatx').addEventListener('click', e => { noDefault(e); chatClose(); });
+    const inp = chatP.querySelector('input');
+    inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape') chatClose(); }); // no game keys while typing
+    inp.addEventListener('keyup', e => e.stopPropagation());
+    chatP.querySelector('form').addEventListener('submit', e => {
+      e.preventDefault(); const v = inp.value.trim();
+      if (v && window.Online && Online.sendChat && Online.sendChat(v)) { ownSent.push(v); if (ownSent.length > 10) ownSent.shift(); }
+      inp.value = ''; chatClose(); // send-and-close
+    });
+    if (window.Online) Online.onChat = m => {
+      const i = m.name && window.Online && m.name === Online.name ? ownSent.indexOf(m.text) : -1;
+      if (i >= 0) ownSent.splice(i, 1);
+      else if (Online.inGame && chatP.classList.contains('hidden')) { unread++; badge(); }
+      if (!chatP.classList.contains('hidden')) renderChat();
+    };
+    if (window.visualViewport) { visualViewport.addEventListener('resize', placeChat); visualViewport.addEventListener('scroll', placeChat); }
+  }
+  function badge() { const b = $('tuChatBadge'); if (!b) return; b.textContent = unread > 9 ? '9+' : unread; b.classList.toggle('hidden', !unread); }
+  function renderChat() {
+    const log = $('tuChatLog'), lines = (window.Online && Online.chatLines) || [];
+    log.innerHTML = lines.slice(-40).map(x => x.sys ? `<div class="sys">${escH(x.text)}</div>` : `<div><b>${escH(x.name)}:</b> ${escH(x.text)}</div>`).join('') || '<div class="sys">No messages yet</div>';
+    log.scrollTop = 1e6;
+  }
+  function placeChat() { // top-centre, inside the visible area (keyboard up: the visual viewport shrinks)
+    if (!chatP || chatP.classList.contains('hidden')) return;
+    const vv = window.visualViewport, top = (vv ? vv.offsetTop : 0) + 6, h = (vv ? vv.height : innerHeight) - 12;
+    chatP.style.top = top + 'px'; chatP.style.maxHeight = Math.max(120, Math.min(h, 300)) + 'px';
+  }
+  function chatOpen() {
+    if (!chatP) return; releaseAll();
+    unread = 0; badge(); chatP.classList.remove('hidden'); chatBack.classList.remove('hidden'); renderChat(); placeChat();
+    T.stats.chat = (T.stats.chat || 0) + 1;
+  }
+  function chatClose() { if (!chatP) return; const i = chatP.querySelector('input'); if (document.activeElement === i) i.blur(); chatP.classList.add('hidden'); chatBack.classList.add('hidden'); }
+  T.chatOpen = chatOpen; T.chatClose = chatClose; T.unread = () => unread;
 
   function openSheet() { sheet.classList.remove('hidden'); }
 
@@ -349,7 +396,7 @@
     const p = playing(), g = game();
     root.classList.toggle('tu-play', p);
     ui.classList.toggle('hidden', !p);
-    if (!p) { if (wasPlaying) { releaseAll(); sheet.classList.add('hidden'); if (g) g.touchAim = null; } wasPlaying = false; rotate.classList.add('hidden'); return; }
+    if (!p) { if (wasPlaying) { releaseAll(); sheet.classList.add('hidden'); chatClose(); unread = 0; badge(); if (g) g.touchAim = null; } wasPlaying = false; rotate.classList.add('hidden'); return; }
     if (!wasPlaying || g.units !== lastUnits) { // a new battle: compact default zoom + padding for the HUD rows
       lastUnits = g.units; g.zoom = g.zoomT = Math.max(g.minZoom ? g.minZoom() : 0, TOUCH_ZOOM); placeBar(innerHeight > innerWidth);
     }
@@ -366,6 +413,22 @@
     const portrait = innerHeight > innerWidth;
     rotate.classList.toggle('hidden', !portrait || !!T.rotateDismissed || !g || g.state !== 'play');
   }
+  // turn announcement (touch): "Player: Character, Team" in the team colour, ~1.8 s, centred in the free band
+  T.bannerText = g => { const u = g.cur, team = u && u.team; if (!u || !team) return '';
+    const who = u.player || team.player || u.name, ch = (u.def0 && u.def0.name) || u.char || u.name;
+    return `${who}: ${ch}, ${team.name}`; };
+  if (typeof Game !== 'undefined') Game.prototype.drawTouchBanner = function (ctx) {
+    const b = this.banner, now = performance.now();
+    if (b._seen == null) { b._seen = now; b._text = T.bannerText(this); b._color = this.cur && this.cur.team ? this.cur.team.color : b.color; }
+    const age = (now - b._seen) / 1000; if (age > 1.8) return;
+    const a = Math.min(1, age / 0.15, (1.8 - age) / 0.35), y = (this.viewPad ? this.viewPad.top : 150) + 54;
+    ctx.save(); ctx.globalAlpha = Math.max(0, a); ctx.textAlign = 'center'; ctx.font = `bold 38px sans-serif`;
+    const w = ctx.measureText(b._text).width + 48;
+    ctx.fillStyle = 'rgba(14, 10, 40, 0.72)'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(W / 2 - w / 2, y - 40, w, 56, 28) : ctx.rect(W / 2 - w / 2, y - 40, w, 56); ctx.fill();
+    ctx.strokeStyle = b._color; ctx.lineWidth = 3; ctx.stroke();
+    ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.strokeText(b._text, W / 2, y); ctx.fillStyle = b._color; ctx.fillText(b._text, W / 2, y);
+    ctx.restore(); T.stats.banner = b._text;
+  };
   // drag-aim overlay (drawn by game.drawHUD in canvas pixels; only exists in touch mode)
   if (typeof Game !== 'undefined') Game.prototype.drawTouchAim = function (ctx) {
     const a = this.touchAim; if (!a || !this.cur) return;

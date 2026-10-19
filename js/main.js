@@ -77,17 +77,13 @@
   function applyView(toast) {
     const want3d = S.view !== '2d' && !!r3d && r3d.ok;
     if (r3d) r3d.setActive(want3d); else $('game3d').style.display = 'none';
-    document.querySelectorAll('#viewSeg .sbtn').forEach(b => { b.classList.toggle('sel', b.dataset.v === (want3d ? '3d' : '2d')); if (b.dataset.v === '3d') b.disabled = !r3d; });
+    document.querySelectorAll('#viewSeg .sbtn, #titleViewSeg .sbtn').forEach(b => { b.classList.toggle('sel', b.dataset.v === (want3d ? '3d' : '2d')); if (b.dataset.v === '3d') b.disabled = !r3d; });
     $('viewMsg').textContent = r3d ? '' : '3D needs WebGL (not available here), using classic 2D.';
-    if (toast && game.state === 'play') game.toast(want3d ? '3D view' : 'classic 2D view');
   }
-  function toggleView() { if (!r3d) { applyView(); return; } S.view = S.view === '2d' ? '3d' : '2d'; save(); applyView(true); }
+  // the view is a pre-game setting (title screen / page 1, saved with the other settings); there is no in-battle toggle
   window.setView = v => { S.view = v === '2d' ? '2d' : '3d'; save(); applyView(); };
   document.querySelectorAll('#viewSeg .sbtn').forEach(b => b.addEventListener('click', () => { SFX.select(); lobbyRow = 7; window.setView(b.dataset.v); refreshLobby(); }));
-  window.addEventListener('keydown', e => {
-    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
-    if ((e.key === 'v' || e.key === 'V') && !e.repeat && !e.ctrlKey && !e.metaKey) toggleView();
-  });
+  document.querySelectorAll('#titleViewSeg .sbtn').forEach(b => b.addEventListener('click', () => { if (b.disabled || game.state === 'play') return; SFX.select(); window.setView(b.dataset.v); }));
 
   function show(name) {
     step = name;

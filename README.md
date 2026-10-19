@@ -8,8 +8,9 @@ or serve the folder: `python3 -m http.server 8000` → http://localhost:8000
 ## 3D view (2.5D) and Classic 2D
 The game is drawn in **3D by default** (Three.js r149, vendored in `js/vendor/three.min.js`, so it still runs from file://).
 The simulation is unchanged: terrain mask, physics, bots, rules, moves and worlds are the same 2D code, and only the rendering differs.
-- **Switch:** lobby row **View (V toggles)** → **3D** / **Classic 2D**, or press **V** at any time (also mid-game).
-  The choice is remembered. URL override: `index.html?view=2d` or `?view=3d`.
+- **Switch:** the **3D / 2D view** setting, chosen before a game: on the title screen or the page-1 row **3D / 2D view**
+  (desktop and touch, one shared saved setting). There is no in-battle toggle any more (the V key and the touch 3D/2D
+  button were removed). 3D is the default; without WebGL the game falls back to Classic 2D. Online it's each player's own choice. The choice is remembered. URL override: `index.html?view=2d` or `?view=3d`.
 - **Fallback:** without WebGL the 3D button is disabled with a note, and the game runs in Classic 2D.
 - **What is 3D:** extruded, beveled terrain with smooth remeshing after every crater (marching squares on the
   2D mask; only the touched 128px chunks are rebuilt). There are grass, snow and pebble tufts and 3D world decorations.
@@ -188,12 +189,11 @@ Full numbers: see "Move stat sheet" below.
 | Mouse wheel, + / − , 0 | Zoom in / out (2D and 3D), 0 resets · C recenters on the active unit |
 | Minimap (top centre) | Click or drag to pan there; shows terrain, units in team colours and the view box |
 | P | Pause · H or the **?** HUD button: help (lists the active unit's specials; close with **Got it**, X, Esc, Enter or a click outside, **Don't show again** is remembered) · M mute |
-| V | Toggle 3D / Classic 2D view |
 
 During bot turns the keyboard is ignored (except P/H/M/V/camera) — just watch.
 
 ## Mobile / touch controls
-On phones and tablets the touch UI turns on by itself. It is detected by `(pointer: coarse)` or the first touch. Use `?touch=1` to force it on (for example for testing on a desktop browser) and `?touch=0` to force it off. On a desktop with a mouse nothing changes: the touch UI is never built, and the desktop layout, keys and help are the same as before (checked by `tests/desktop-unchanged-test.js`).
+On phones and tablets the touch UI turns on by itself. It is detected by `(pointer: coarse)` or the first touch. Use `?touch=1` to force it on (for example for testing on a desktop browser) and `?touch=0` to force it off. On a desktop with a mouse nothing changes: the touch UI is never built, and the desktop layout, keys and help are the same as before, apart from the 3D / 2D view becoming a pre-game setting (checked by `tests/desktop-unchanged-test.js`).
 
 | Touch | Action |
 |---|---|
@@ -201,9 +201,13 @@ On phones and tablets the touch UI turns on by itself. It is detected by `(point
 | 1-finger drag on the battlefield (your turn) | **Aim.** The shot points from your character toward your finger, and you face that side. A dashed line, a reticle and the angle show while you drag. Drag farther from the character for finer control. Within ~40 px of the character nothing changes, so the angle can't jitter. Lifting keeps the angle |
 | Hold FIRE, lift | Charge power and fire. With a defense selected, FIRE uses it |
 | Hold JUMP / FLIP, lift | Charged jump / backflip |
-| Weapon bar (2 rows, bottom centre) | Tap to select. Row 1: the 5 base slots (attacks, defenses, ★ specials with uses left). Row 2: angle / power / STEPS / jump info and your CRATE ITEMS (scrolls sideways if you hoard). Selected = gold, used up = greyed out |
+| Weapon bar (2 rows, bottom centre) | Tap to select. Row 1: the 5 base slots (attacks, defenses, ★ specials with uses left). Row 2: your CRATE ITEMS (scrolls sideways if you hoard). Selected = gold, used up = greyed out |
 | 2 fingers: pinch · drag | Zoom · pan (any time). When it isn't your turn, 1 finger pans too. Tap the minimap to look there. ◎ recenters |
-| ⏸ · ? · 3D/2D · 💬 | Menu (resume / pause / help / quit) · help · view · chat (online: opens the phone keyboard) |
+| Meters above ◀ ▶ | Angle, JUMP ready, POWER (fills live while FIRE is held) and STEPS left |
+| ⏸ · ? · 💬 · ⛶ | Menu (resume / pause / help / quit) · help · chat (online) · full screen |
+| 💬 (online) | Opens the chat panel: recent history (scrolls), a message box (tap it for the keyboard) and SEND. Send, ✕ or a tap outside closes it. A red badge counts messages that arrived while it was closed. The left chat log isn't shown on touch |
+
+On touch the event text is left out to keep the screen clear: no toast line or online status line under the weapons. Between turns one short line shows who's up, for example **"Player 2: PEPE, Team 1"**, in the team's colour for ~1.8 s. Damage numbers over the characters and the victory screen are unchanged.
 
 **Full screen / Game Mode (touch devices):**
 - **iPhone (Safari):** Safari on iPhone can't make a web page fullscreen, so the game's Game Mode is the Home Screen web app. Tap Share, then Add to Home Screen. A small one-time tip on the title screen says this (✕ dismisses it, and it is remembered in `localStorage`). Launched from the Home Screen the game opens without a browser bar (`manifest.webmanifest` with `display: fullscreen` falling back to `standalone`, `orientation: landscape`, `apple-mobile-web-app-capable`, `black-translucent` status bar, a 180 px apple-touch-icon). The canvas stays out of the notch on the left and right. In a normal Safari tab the game fills everything below Safari's bars and refits when the toolbars collapse or expand (`100dvh` / `visualViewport`).
@@ -249,8 +253,8 @@ Balance check (Hard bots, 3v3, 60 games per pairing, sides rotated): every team 
 - `node tests/bot-sim.js` — all-bot / mixed games to completion + win-rate matchups
 - `node tests/jump-test.js [--no-shot]` — charged jumps (tap vs full hold, backflip, one per turn, water, bots) + 37-charge-jump-3d.png
 - `node tests/pump-walk-test.js [seeds=8]` — Pump walkability: ground step heights vs the 7 px climb limit, platform count, spawns, and a unit walking across the whole map both ways with the real movement code
-- `node tests/mobile-touch-test.js [--shots] [--no-online] [--only=ABCDEFG]` — touch controls in Playwright iPhone 13 emulation (landscape + portrait). It also covers iPhone Safari (no fullscreen API: Home Screen tip, canvas fills 844x340 and refits on toolbar resize), the Home Screen web app (standalone + 47 px notch safe areas), an iPad fullscreen-button check, and the server serving the manifest and icons with the right MIME types. It taps through setup, then hold-walks against the STEPS budget, drag-aims (angle = finger direction, facing flips, dead zone), charges a jump, uses the 2-row weapon bar (base slot, greyed used-up special, crate item), fires, pinch-zooms, pans with two fingers (and with one when it isn't your turn), taps the minimap, checks the top padding, help/menu, 44 px targets and that the buttons, weapon bar and HUD don't overlap at 750x342, 844x340, 932x430 and 740x360 (no ARMS / AIM pad). Online part (server needed): the phone joins a lobby, chats, and its touch walk, drag-aim and fire are relayed to a desktop host
-- `node tests/desktop-unchanged-test.js [refDir] [--shot]` — renders seeded desktop scenes (title, page 1, page 2, 2D battle, help, 3D battle) after the same keyboard input and compares the pixels with a pre-touch copy (default `memecoin-artillery.v16bak`)
+- `node tests/mobile-touch-test.js [--shots] [--no-online] [--only=ABCDEFGH]` — touch controls in Playwright iPhone 13 emulation (landscape + portrait). It also covers iPhone Safari (no fullscreen API: Home Screen tip, canvas fills 844x340 and refits on toolbar resize), the Home Screen web app (standalone + 47 px notch safe areas), an iPad fullscreen-button check, and the server serving the manifest and icons with the right MIME types. It taps through setup, then hold-walks against the STEPS budget, drag-aims (angle = finger direction, facing flips, dead zone), charges a jump, uses the 2-row weapon bar (base slot, greyed used-up special, crate item), fires, pinch-zooms, pans with two fingers (and with one when it isn't your turn), taps the minimap, checks the top padding, help/menu, 44 px targets and that the buttons, weapon bar and HUD don't overlap at 750x342, 844x340, 932x430 and 740x360 (no ARMS / AIM pad, no 3D/2D button, POWER + STEPS above the arrows), that 3D is the default and no log/toast text is drawn, the turn banner text, and the pre-game 3D / 2D setting (part H; part C checks it on desktop and that V no longer toggles). Online part (server needed): the phone joins a lobby, chats, its touch walk, drag-aim and fire are relayed to a desktop host, and the 💬 panel is checked (no left log, unread badge, history, send, fits with the keyboard up)
+- `node tests/desktop-unchanged-test.js [refDir] [--shot]` — renders seeded desktop scenes (title, page 1, page 2, 2D battle, help, 3D battle) after the same keyboard input and compares the pixels with a pre-touch copy (default `memecoin-artillery.v16bak` plus the one-line walk fix). The intentional desktop changes (the title's 3D / 2D row, the page-1 label, one help row) are checked to be the only differences
 - `node tests/crates-test.js` — 2 crates per round, landing, pickup, every crate item, crate blasts, online snapshot of crates/inventory
 - `node tests/crates-bots-check.js` — bots at every level pick up crates and use each crate item
 - `node tests/walk-jump-test.js` — 450 px walk budget (multiple walks, jumps free, out-of-steps, refill, snapshot) and ×0.5 own-jump fall damage vs the same drop / walk-off / knockback
