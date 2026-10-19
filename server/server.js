@@ -230,7 +230,9 @@ wss.on('connection', (ws) => {
         break;
       }
       case 'input': // active player's key -> host (the host checks it really is their turn)
-        if (room.inGame && me.pid !== room.hostPid) { const h = room.players.find(x => x.pid === room.hostPid); send(h && h.ws, { t: 'input', pid: me.pid, k: String(m.k).slice(0, 12), d: !!m.d }); }
+        if (room.inGame && me.pid !== room.hostPid) { const h = room.players.find(x => x.pid === room.hostPid); const fw = { t: 'input', pid: me.pid, k: String(m.k).slice(0, 12), d: !!m.d };
+          if (fw.k === 'aim') { const a = Number(m.a); if (!isFinite(a)) break; fw.a = Math.max(-90, Math.min(90, a)); fw.f = m.f === -1 ? -1 : 1; } // touch aim angle
+          send(h && h.ws, fw); }
         break;
       case 'snap': // host -> everyone else
         if (!room.inGame || me.pid !== room.hostPid || m.gameId !== room.start.gameId) return;

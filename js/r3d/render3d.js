@@ -403,6 +403,10 @@ class Renderer3D {
     const kx = c.x == null || this.snapCam ? 1 : 1 - Math.exp(-dt * (g.projectiles.length ? 5 : 3.2));
     c.x = c.x == null ? tx : c.x + (tx - c.x) * kx; c.y += (ty - c.y) * (this.snapCam ? 1 : k); if (this.snapCam || (this.focus && this.focus.snap)) { c.x = tx; c.y = ty; c.zoom = zoom; c.pitch = pitch; c.yaw = yaw; this.snapCam = false; }
     if (playing && !g.camHold) g.camX = g.clampCam(c.x - (g.viewW ? g.viewW() : W) / 2);
+    { // touch mode only (g.viewPad from js/touch.js): shift the picture so the action sits in the band between the HUD rows
+      const vp = g.viewPad, key = vp && vp.shift ? vp.shift.toFixed(1) + ':' + W : '';
+      if (key !== (this._vpKey || '')) { if (key) this.camera.setViewOffset(W, H, 0, -vp.shift, W, H); else this.camera.clearViewOffset(); this._vpKey = key; }
+    }
     const fov = this.camera.fov * Math.PI / 180, d = (H / 2) / Math.tan(fov / 2) / c.zoom, P = c.pitch, Y0 = c.yaw;
     // zoomed far out on a big map: push the fog back with the camera so the terrain stays visible
     if (this.scene.fog && this.cfg && this.cfg.fog) { const d0 = (H / 2) / Math.tan(fov / 2), extra = Math.max(0, d - d0 * 1.1); this.scene.fog.near = this.cfg.fog[1] + extra; this.scene.fog.far = this.cfg.fog[2] + extra * 1.1; }

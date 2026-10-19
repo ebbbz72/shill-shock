@@ -377,6 +377,7 @@
   }
   function onInput(m) {
     const g = game, u = g.cur;
+    if (m.k === 'aim') { if (u && u.pid === m.pid && !u.away) g.setAim(+m.a, m.f); return; } // touch drag-aim of the active guest (host validates + clamps)
     if (!u || u.pid !== m.pid || u.away || g.state !== 'play' || !RELAY.has(m.k)) return;
     if (m.d) { remoteKeys[m.k] = true; g.actionKey(m.k); }
     else { remoteKeys[m.k] = false; if (m.k === ' ') g.releaseFire(); else if (m.k === 'Enter' || m.k === 'Backspace') g.releaseJump(m.k === 'Backspace'); } // the host times the jump hold
@@ -587,6 +588,15 @@
   window.addEventListener('blur', () => { for (const k of held) send({ t: 'input', k, d: false }); held.clear(); });
   function myTurn() { const u = game.cur; return !!u && u.pid === O.pid && !u.away && game.state === 'play'; }
   O.myTurn = myTurn;
+  let aimT = 0, aimLast = null;
+  O.sendAim = (a, f) => { // touch guest: relay the aim angle (throttled); the host checks it's this player's turn
+    if (!O.inGame || !game.mirror || !myTurn()) return false;
+    const now = performance.now(), v = Math.round(a * 10) / 10;
+    if (aimLast && aimLast[0] === v && aimLast[1] === f) return true;
+    if (now - aimT < 45) { O._aimPending = [v, f]; return true; }
+    aimT = now; aimLast = [v, f]; O._aimPending = null; send({ t: 'input', k: 'aim', d: true, a: v, f }); return true;
+  };
+  setInterval(() => { const p = O._aimPending; if (p) { O._aimPending = null; aimT = 0; O.sendAim(p[0], p[1]); } }, 60);
   setInterval(() => {
     if (!O.inGame) return;
     const g = game, u = g.cur, bar = $('netbar'); if (!u) return;

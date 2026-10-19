@@ -241,7 +241,7 @@ input.code { width: 120px !important; text-transform: uppercase; letter-spacing:
 /* ================= mobile touch controls (only with html.touch: coarse pointer, first touch, or ?touch=1) ================= */
 html.touch { -webkit-text-size-adjust: 100%; }
 html.touch body { -webkit-tap-highlight-color: transparent; }
-html.touch #wrap { position: absolute; top: 0; bottom: 0; left: 0; right: 0; margin: auto; transform: none;
+html.touch #wrap { position: fixed; top: 0; bottom: 0; left: 0; right: 0; margin: auto; transform: none;
   width: min(100vw, calc(100vh * 16 / 9)); width: min(100vw, calc(100dvh * 16 / 9)); height: auto; }
 html.touch #game { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 html.touch.tu-play, html.touch.tu-play body { touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
@@ -307,7 +307,7 @@ html.touch #netchat input { min-height: 40px; opacity: .8; }
   html.touch.tu-play #wrap { bottom: auto; top: calc(env(safe-area-inset-top) + 52px); }
 }
 
-#touchUI { position: fixed; inset: 0; z-index: 7; pointer-events: none; font-family: inherit; --tu-b: max(17vh, calc(env(safe-area-inset-bottom) + 8px)); }
+#touchUI { position: fixed; inset: 0; z-index: 7; pointer-events: none; font-family: inherit; --tu-b: max(6px, env(safe-area-inset-bottom)); }
 #touchUI.hidden { display: none; }
 .tu-btn { pointer-events: auto; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1;
@@ -321,12 +321,7 @@ html.touch #netchat input { min-height: 40px; opacity: .8; }
 .tu-right { right: max(8px, env(safe-area-inset-right)); align-items: flex-end; }
 .tu-row { display: flex; gap: 8px; }
 .tu-col { display: flex; flex-direction: column; gap: 8px; align-items: center; }
-.tu-aim { height: 100px; width: 58px; justify-content: space-between; padding: 8px 0; margin-left: 33px; }
-.tu-aim small { font-size: 9px; opacity: .8; }
-.tu-aim.up { background: linear-gradient(180deg, rgba(255,216,74,.75) 0 50%, rgba(20,12,50,.55) 50%); }
-.tu-aim.down { background: linear-gradient(0deg, rgba(255,216,74,.75) 0 50%, rgba(20,12,50,.55) 50%); }
 .tu-fire { width: 74px; height: 74px; border-radius: 50%; background: rgba(255, 75, 92, 0.6); border-color: #ffb3c8; font-size: 18px; }
-.tu-arms { font-size: 20px; }
 .tu-jump, .tu-flip { font-size: 22px; }
 .tu-util { position: fixed; display: flex; gap: 6px; } /* placed by js/touch.js (HUD gaps / letterbox / below the canvas) */
 .tu-sm { width: 46px; height: 46px; min-width: 46px; min-height: 46px; font-size: 19px; border-radius: 12px; }
@@ -334,16 +329,29 @@ html.touch #netchat input { min-height: 40px; opacity: .8; }
 .tu-chat { display: none; }
 #touchUI.tu-online .tu-chat { display: flex; }
 #touchUI.tu-wait .tu-left, #touchUI.tu-wait .tu-right { opacity: 0.35; }
-.tu-picker { position: fixed; z-index: 8; right: max(8px, env(safe-area-inset-right)); bottom: max(6px, env(safe-area-inset-bottom)); width: min(480px, 76vw); max-height: calc(100vh - 16px); overflow-y: auto;
-  background: rgba(20, 12, 50, 0.94); border: 2px solid #ffd84a; border-radius: 16px; padding: 6px 8px 8px; touch-action: pan-y; --tu-b: max(17vh, calc(env(safe-area-inset-bottom) + 8px)); }
-.tu-ph { display: flex; justify-content: space-between; align-items: center; font-weight: bold; color: #ffd84a; letter-spacing: 2px; margin-bottom: 3px; font-size: 13px; }
-.tu-x { width: 44px; height: 44px; border-radius: 50%; background: #ffd84a; font-size: 16px; }
-.tu-plist { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
-.tu-psep { grid-column: 1 / -1; font-size: 11px; color: #ffd84a; letter-spacing: 2px; margin-top: 2px; }
-.tu-pi { min-height: 44px; text-align: left; padding: 3px 7px; font-size: 12px; line-height: 14px; background: #3a2d78; color: #fff; border: 2px solid transparent; display: flex; flex-direction: column; justify-content: center; }
-.tu-pi b { color: #ffd84a; font-size: 11px; } .tu-pi small { font-size: 10px; color: #c9c2ea; font-weight: normal; }
-.tu-pi.defense { background: #24427a; } .tu-pi.crate { background: #6b2a6e; }
-.tu-pi.sel { border-color: #ffd84a; } .tu-pi:disabled { opacity: .35; }
+.tu-bar { position: fixed; display: flex; flex-direction: column; gap: 3px; pointer-events: auto; touch-action: none; -webkit-user-select: none; user-select: none; } /* placed by js/touch.js */
+.tu-brow { display: flex; gap: 3px; min-height: 44px; }
+.tu-brow1 > .tu-ws { flex: 1 1 0; }
+.tu-items { display: flex; gap: 3px; flex: 1 1 auto; overflow-x: auto; min-width: 0; scrollbar-width: none; }
+.tu-items .tu-ws { flex: 0 0 auto; min-width: 74px; }
+.tu-ws { min-height: 44px; height: 44px; min-width: 0; padding: 2px 5px; border-radius: 10px; text-align: left; display: flex; flex-direction: column; justify-content: center; overflow: hidden;
+  background: rgba(70, 40, 30, 0.78); color: #fff; border: 2px solid rgba(255, 140, 90, 0.55); font-size: 12px; line-height: 14px; font-weight: bold; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+.tu-ws .tu-wn { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tu-ws b { color: #ffd84a; font-size: 11px; } .tu-ws small { font-size: 10px; color: #e6dcff; font-weight: normal; white-space: nowrap; }
+.tu-ws.defense { background: rgba(30, 60, 110, 0.8); border-color: rgba(120, 190, 255, 0.6); }
+.tu-ws.crate { background: rgba(100, 36, 104, 0.85); border-color: rgba(255, 140, 240, 0.6); }
+.tu-ws.special { border-style: dashed; border-color: #ffd84a; }
+.tu-ws.sel { background: #ffd84a; color: #160c30; border: 2px solid #fff; text-shadow: none; box-shadow: 0 0 0 2px rgba(255,216,74,.45); }
+.tu-ws.sel b, .tu-ws.sel small { color: #2a1a40; }
+.tu-ws.empty { opacity: 0.35; filter: grayscale(1); }
+.tu-info { flex: 0 0 142px; height: 44px; box-sizing: border-box; padding: 3px 6px; border-radius: 10px; background: rgba(14, 10, 40, 0.78); color: #fff; font-size: 11px; line-height: 13px; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; }
+.tu-i1 { display: flex; gap: 5px; align-items: baseline; white-space: nowrap; } .tu-i1 b { color: #ffd84a; font-size: 13px; } .tu-i1 .tu-def { color: #8ff5b5; font-size: 11px; }
+.tu-i1 i { font-style: normal; font-size: 9px; color: rgba(255,255,255,.45); } .tu-i1 i.ok { color: #8ff5b5; }
+.tu-pw { height: 6px; border-radius: 3px; background: rgba(255,255,255,.15); overflow: hidden; } .tu-pw > div { height: 100%; background: linear-gradient(90deg, #4ade80, #ffd84a 60%, #ff4b4b); } .tu-pw > div.j { background: linear-gradient(90deg, #7fd8ff, #b06bff); }
+.tu-st { display: flex; gap: 4px; align-items: center; font-size: 9px; color: #ffd84a; } .tu-st > div { flex: 1; height: 5px; border-radius: 3px; background: rgba(255,255,255,.15); overflow: hidden; } .tu-st > div > div { height: 100%; background: #ffd84a; }
+.tu-noitems { align-self: center; font-size: 10px; color: rgba(255,255,255,.55); padding-left: 4px; white-space: nowrap; }
+#touchUI.tu-wait .tu-bar { opacity: 0.55; }
+#touchUI.tu-help .tu-bar { display: none; }
 .tu-rotate { position: fixed; z-index: 9; left: 50%; transform: translateX(-50%); top: max(6px, env(safe-area-inset-top)); display: flex; align-items: center; gap: 8px;
   background: rgba(20, 12, 50, 0.9); border: 2px solid #8ff5b5; border-radius: 14px; padding: 4px 4px 4px 12px; font-size: 13px; font-weight: bold; color: #8ff5b5; width: max-content; max-width: 94vw; }
 .tu-rotate button { width: 44px; height: 44px; border-radius: 50%; background: #8ff5b5; }
@@ -353,8 +361,6 @@ html.touch #netchat input { min-height: 40px; opacity: .8; }
 .tu-sheetcard .big { min-height: 48px; }
 @media (orientation: portrait) {
   #touchUI { --tu-b: max(4vh, calc(env(safe-area-inset-bottom) + 10px)); }
-  .tu-picker { bottom: auto; top: calc(env(safe-area-inset-top) + 56px + 56.25vw); right: 50%; transform: translateX(50%); width: 94vw; max-height: 60vh; }
-  .tu-plist { grid-template-columns: 1fr 1fr; }
   html.touch #netchat { top: auto; }
   .tu-rotate { top: calc(env(safe-area-inset-top) + 52px + 56.25vw + 64px); font-size: 12px; }
 }

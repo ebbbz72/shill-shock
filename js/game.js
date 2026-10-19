@@ -314,8 +314,15 @@ class Game {
   }
   resetZoom() { this.zoomT = 1; }
   recenter() { this.camHold = false; }
-  clampCamY(y) { const vh = this.viewH(); return vh >= H ? H - vh : clamp(y, 0, H - vh); }
+  clampCamY(y) {
+    const vp = this.viewPad; // touch mode only: room for the top HUD row / bottom weapon rows (js/touch.js)
+    if (vp) { const z = this.zoom, lo = -vp.top / z, hi = H - this.viewH() + vp.bot / z; return lo > hi ? (lo + hi) / 2 : clamp(y, lo, hi); }
+    const vh = this.viewH(); return vh >= H ? H - vh : clamp(y, 0, H - vh);
+  }
   camYTarget() {
+    const vp = this.viewPad;
+    if (vp) { const p = this.projectiles.find(q => !q.dead), fy = p ? p.y : this.cur ? this.cur.y - 40 : H / 2; // centre of the free band
+      return this.clampCamY(fy - (vp.top + (H - vp.top - vp.bot) * 0.55) / this.zoom); }
     const vh = this.viewH(); if (vh >= H) return H - vh; // zoomed out: water at the bottom of the screen, sky above
     const p = this.projectiles.find(q => !q.dead), fy = p ? p.y : this.cur ? this.cur.y - 40 : H / 2;
     return this.clampCamY(fy - vh * 0.55);
@@ -359,6 +366,16 @@ class Game {
     else if (k === 'e') this.cycleWeapon(team, 1);
   }
 
+  // aim from a touch drag (local) or a relayed touch aim (online host): same state the ↑ ↓ keys change
+  setAim(deg, facing) {
+    if (this.mirror) return false;
+    const u = this.cur;
+    if (this.phase !== 'aim' || !u || u.dead || this.isBotTurn() || this.userPaused || this.state !== 'play') return false;
+    if (typeof deg !== 'number' || !isFinite(deg)) return false;
+    u.aim = clamp(deg, -88, 88);
+    if (facing === 1 || facing === -1) u.facing = facing;
+    return true;
+  }
   selectWeapon(team, idx) {
     if (idx < 0 || idx >= team.weapons.length || this.charging) return;
     if (!this.hasAmmo(team, team.weapons[idx])) { this.toast('out of ammo — ngmi'); return; }
@@ -640,7 +657,7 @@ class Game {
   handleControls(dt) {
     const u = this.cur; if (!u || u.dead) return;
     const keys = this.netKeys ? this.netKeys() : this.keys; // online: the active player's (relayed) keys
-    const L = keys['ArrowLeft'], R = keys['ArrowRight'];
+    const L = !!keys['ArrowLeft'], R = !!keys['ArrowRight']; // !! : an unpressed key is undefined, a released one false
     if (L !== R && !this.charging) {
       const dir = L ? -1 : 1;
       this.camHold = false;
@@ -1364,6 +1381,7 @@ class Game {
   drawHUD(ctx) {
     const team = this.teams[this.turnTeam], u = this.cur;
     if (!team || !u) return;
+    if (this.touchAim && this.drawTouchAim) this.drawTouchAim(ctx); // touch drag-aim line (js/touch.js)
     ctx.textBaseline = 'alphabetic';
     // current team / unit
     this.panel(ctx, 12, 10, 290, 60, team.color);
@@ -1444,7 +1462,8 @@ class Game {
     }
     ctx.fillStyle = '#fff'; ctx.fillRect(bx - 1, by - 8, 2, 16);
 
-    // weapons + angle + power (bottom)
+    // weapons + angle + power (bottom); touch mode shows its own 2-row weapon bar instead (js/touch.js)
+    if (!this.touchBar) {
     const slotW = 152, n = Math.min(team.weapons.length, BASE_SLOTS), pw = n * slotW + 262;
     const px = (W - pw) / 2, py = H - 62;
     this.panel(ctx, px, py, pw, 54);
@@ -1508,6 +1527,7 @@ class Game {
       const tags = [u.scope > 0 ? `MOON SCOPE ×${u.scope}` : '', u.fud ? 'FUD (-40% next attack)' : '', u.poison ? `GAS FEE ${u.poison.turns}×-${u.poison.dmg}` : ''].filter(Boolean).join('  ·  ');
       ctx.font = `bold 11px ${FONT}`; ctx.textAlign = 'right'; ctx.strokeText(tags, px + pw - 10, dy); ctx.fillStyle = '#ffd84a'; ctx.fillText(tags, px + pw - 10, dy);
     }
+    } // end bottom bar
 
     // help hint
     ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = `bold 12px ${FONT}`;
@@ -1545,7 +1565,7 @@ class Game {
     }
     if (this.toastMsg) {
       ctx.textAlign = 'center'; ctx.font = `bold 18px ${FONT}`; ctx.fillStyle = '#fff'; ctx.lineWidth = 4; ctx.strokeStyle = '#000';
-      ctx.strokeText(this.toastMsg.text, W / 2, H - 80); ctx.fillText(this.toastMsg.text, W / 2, H - 80);
+      const ty = H - 80 - (this.viewPad ? this.viewPad.bot : 0); ctx.strokeText(this.toastMsg.text, W / 2, ty); ctx.fillText(this.toastMsg.text, W / 2, ty);
     }
     if (this.showHelp) this.drawHelp(ctx);
   }
@@ -1595,10 +1615,9 @@ class Game {
     ctx.fillStyle = 'rgba(255,216,74,0.12)'; ctx.fillRect(x + 6, y + h - 52, w - 12, 46);
     ctx.textAlign = 'center'; ctx.fillStyle = '#ffd84a'; ctx.font = `bold 24px ${FONT}`; ctx.fillText('HOW TO NOT GET REKT', W / 2, y + 36);
     const rows = window.TouchUI && TouchUI.on ? [ // touch devices (js/touch.js); the desktop rows below are unchanged
-      ['◀ ▶ (hold)', 'Walk · STEPS meter = ~5 s of walking per turn'], ['AIM pad ▲ ▼', 'Aim angle: hold or slide up / down'], ['Hold FIRE', 'Charge power — release to fire'],
-      ['Hold JUMP', 'Charge a jump: tap = hop, hold ~1 s = big jump (1/turn)'], ['Hold FLIP', 'Charged backflip (higher, slightly back)'], ['ARMS · tap weapon bar', 'Pick an attack, defense or crate item'], ['Defense picked', 'FIRE uses it (lasts until your team\'s next turn)'],
-      ['1-finger drag on map', 'Pan camera · ◎ recenters'],
-      ['Pinch', 'Zoom in / out · tap the minimap to look there'],
+      ['◀ ▶ (hold)', 'Walk · STEPS meter = ~5 s of walking per turn'], ['Drag on the battlefield', 'Aim at your finger (drag farther = finer)'], ['Hold FIRE', 'Charge power — release to fire'],
+      ['Hold JUMP', 'Charge a jump: tap = hop, hold ~1 s = big jump (1/turn)'], ['Hold FLIP', 'Charged backflip (higher, slightly back)'], ['Weapon bar (2 rows)', 'Tap an attack, defense, special or crate item'], ['Defense picked', 'FIRE uses it (lasts until your team\'s next turn)'],
+      ['2 fingers (1 off-turn)', 'Pinch zoom · drag pan · tap minimap · ◎ recenter'],
       ['⏸ · ? · 💬 · 3D/2D · ⛶', 'Menu / pause · help · chat (online) · view · full screen'],
     ] : [
       ['← →', 'Walk'], ['↑ ↓', 'Aim angle'], ['Hold SPACE', 'Charge power — release to fire'],
