@@ -113,9 +113,9 @@
       g.font = 'bold 64px Arial Black, Impact, sans-serif'; g.textAlign = 'center'; g.fillStyle = '#ffd84a'; g.strokeStyle = '#000'; g.lineWidth = 5;
       g.strokeText('?', 116, 82); g.fillText('?', 116, 82);
     } else {
-      const T = new Terrain(1234 + id.length * 77, W, id), L = WORLDS[id].water;
-      g.drawImage(makeBackground(7 + id.length * 31, id), 0, 0, W, H, 0, 0, 232, 116);
-      g.drawImage(T.canvas, 0, 0, W, H, 0, 0, 232, 116);
+      const T = new Terrain(1234 + id.length * 77, MAP_W, id), L = WORLDS[id].water;
+      g.drawImage(makeBackground(7 + id.length * 31, id), 0, 0, MAP_W, H, 0, 0, 232, 116);
+      g.drawImage(T.canvas, 0, 0, MAP_W, H, 0, 0, 232, 116);
       const gr = g.createLinearGradient(0, WATER_Y * 116 / H, 0, 116); gr.addColorStop(0, L.top); gr.addColorStop(1, L.bottom);
       g.fillStyle = gr; g.fillRect(0, WATER_Y * 116 / H, 232, 116); g.fillStyle = L.line; g.fillRect(0, WATER_Y * 116 / H, 232, 1.5);
     }
@@ -135,7 +135,7 @@
     document.querySelectorAll('.mapbtn').forEach(x => x.classList.toggle('sel', x.dataset.w === S.world));
     const o = MAP_OPTS.find(m => m.id === S.world);
     mapLabel.innerHTML = `<b style="color:${o.color || '#ffd84a'}">${o.name}</b> — ${o.tagline}${o.twist && o.id !== 'classic' ? ` <i>Twist: ${o.twist}</i>` : ''} <span style="opacity:.7">(arenas, not team buffs)</span>`;
-    if (preview && S.world !== 'random' && game.state === 'menu') { game.setWorld(S.world); game.terrain = new Terrain((Math.random() * 1e9) | 0, W, game.worldId); }
+    if (preview && S.world !== 'random' && game.state === 'menu') { game.setWorld(S.world); game.terrain = new Terrain((Math.random() * 1e9) | 0, MAP_W, game.worldId); }
   }
 
 
@@ -311,7 +311,7 @@
   $('rematchBtn').addEventListener('click', () => launch()); // same setup
   $('menuBtn').addEventListener('click', () => {
     victory.classList.add('hidden'); menu.classList.remove('hidden');
-    game.state = 'menu'; game.terrain = new Terrain((Math.random() * 1e9) | 0, W, game.worldId);
+    game.state = 'menu'; game.terrain = new Terrain((Math.random() * 1e9) | 0, MAP_W, game.worldId);
     goLobby();
   });
 
@@ -420,10 +420,10 @@
   window.MenuAPI = { game, show, get step() { return step; }, setup: S, save, applyView, drawPortrait, mascotArt, esc, MAP_OPTS, LEVEL_NAME,
     hideMenu() { menu.classList.add('hidden'); victory.classList.add('hidden'); },
     showMenu(name) { victory.classList.add('hidden'); menu.classList.remove('hidden'); show(name); },
-    menuBackdrop() { game.state = 'menu'; game.mirror = false; game.terrain = new Terrain((Math.random() * 1e9) | 0, W, game.worldId); } };
+    menuBackdrop() { game.state = 'menu'; game.mirror = false; game.terrain = new Terrain((Math.random() * 1e9) | 0, MAP_W, game.worldId); } };
 
   // menu backdrop: a random themed world
-  game.setWorld('random'); game.terrain = new Terrain((Math.random() * 1e9) | 0, W, game.worldId);
+  game.setWorld('random'); game.terrain = new Terrain((Math.random() * 1e9) | 0, MAP_W, game.worldId);
   show('title');
   applyView();
 

@@ -24,8 +24,8 @@ const ROOM_TTL_MS = 10 * 60 * 1000;     // empty rooms are kept this long (so pe
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 // ---------------- static files ----------------
-const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.md': 'text/markdown; charset=utf-8', '.png': 'image/png', '.ico': 'image/x-icon' };
-const ALLOWED = /^(index\.html|style\.css|README\.md|MOVES\.md|DEPLOY\.md|js\/[A-Za-z0-9_\-\/.]+\.js)$/;
+const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.md': 'text/markdown; charset=utf-8', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json; charset=utf-8' };
+const ALLOWED = /^(index\.html|style\.css|README\.md|MOVES\.md|DEPLOY\.md|manifest\.webmanifest|icons\/[A-Za-z0-9_\-]+\.png|js\/[A-Za-z0-9_\-\/.]+\.js)$/;
 const server = http.createServer((req, res) => {
   let p;
   try { p = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch (e) { res.writeHead(400); res.end('bad request'); return; }
@@ -36,7 +36,7 @@ const server = http.createServer((req, res) => {
   const file = path.join(ROOT, rel);
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404); res.end('not found'); return; }
-    res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream', 'cache-control': rel === 'index.html' ? 'no-cache' : 'public, max-age=300' });
+    res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream', 'cache-control': rel === 'index.html' || rel === 'manifest.webmanifest' ? 'no-cache' : 'public, max-age=300' });
     res.end(data);
   });
 });

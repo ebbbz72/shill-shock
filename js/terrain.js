@@ -1,6 +1,18 @@
 'use strict';
 // World constants (shared by all scripts)
-const W = 1280, H = 720, WATER_Y = 668;
+const MAP_W = 1280, H = 720, WATER_Y = 668; // MAP_W: base map width (the same for every client)
+// W = view width of the game canvas in px (height is always H). Desktop: 1280 (16:9). Touch devices get the screen's
+// aspect instead of a letterbox (e.g. iPhone landscape ~1560-1840), see viewWidthFor() and js/touch.js. Only the view
+// gets wider; maps, physics and online state never depend on W.
+let W = MAP_W;
+function viewWidthFor(w, h) { const a = h > 0 ? w / h : 16 / 9; return Math.max(MAP_W, Math.min(1840, Math.round(H * a / 2) * 2)); }
+(function () { // touch device (same rule as js/touch.js): start with a full-screen view width right away
+  try { const q = new URLSearchParams(location.search).get('touch');
+    if (q === '1' || (q !== '0' && matchMedia('(pointer: coarse)').matches)) {
+      W = viewWidthFor(innerWidth, innerHeight);
+      for (const id of ['game', 'game3d']) { const c = document.getElementById(id); if (c) c.width = W; }
+    } } catch (e) { /* keep 1280 */ }
+})();
 
 function mulberry32(a) {
   return function () {
@@ -18,7 +30,7 @@ function hash2(x, y, s) {
 
 class Terrain {
   constructor(seed, width, worldId) {
-    this.w = Math.max(W, (width || W) | 0);
+    this.w = Math.max(MAP_W, (width || MAP_W) | 0);
     this.seed = seed >>> 0;
     this.worldId = WORLDS[worldId] ? worldId : 'classic'; this.world = WORLDS[this.worldId];
     this.canvas = document.createElement('canvas');

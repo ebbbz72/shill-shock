@@ -63,6 +63,9 @@
     tap(el('button', 'tu-btn tu-sm', '?', util2), () => tapKey('h')).dataset.tu = 'help';
     tap(el('button', 'tu-btn tu-sm tu-txt', '3D/2D', util2), () => tapKey('v')).dataset.tu = 'view';
     const chat = el('button', 'tu-btn tu-sm tu-chat', '💬', util2); chat.dataset.tu = 'chat';
+    if (FS.available()) tap(el('button', 'tu-btn tu-sm tu-fs', '⛶', util2), () => FS.toggle()).dataset.tu = 'fullscreen';
+    T.util = util; T.util2 = util2;
+    buildGameMode();
     chat.addEventListener('click', () => { const i = $('chatInput'); if (i) i.focus(); }); // focus inside the tap: the on-screen keyboard opens
     aimPad(aim);
 
@@ -99,6 +102,86 @@
     const end = () => { pid = null; set(null); };
     pad.addEventListener('pointerup', end); pad.addEventListener('pointercancel', end); pad.addEventListener('lostpointercapture', end);
   }
+
+  // ---------------------------------------------------------------- Game Mode: fullscreen API (Android, iPad, desktop browsers
+  // with touch) or, on iPhone Safari (no element fullscreen), the Home Screen web app (manifest + apple meta tags)
+  const FS = T.fs = {
+    available() { const d = document, e = d.documentElement; return !!((d.fullscreenEnabled || d.webkitFullscreenEnabled) && (e.requestFullscreen || e.webkitRequestFullscreen)); },
+    active() { return !!(document.fullscreenElement || document.webkitFullscreenElement); },
+    async enter() {
+      const e = document.documentElement;
+      try { if (e.requestFullscreen) await e.requestFullscreen({ navigationUI: 'hide' }); else if (e.webkitRequestFullscreen) e.webkitRequestFullscreen(); } catch (x) { return false; }
+      try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (x) { /* not allowed here: fine */ }
+      return true;
+    },
+    exit() { const d = document; try { if (d.exitFullscreen) d.exitFullscreen(); else if (d.webkitExitFullscreen) d.webkitExitFullscreen(); } catch (x) { /* ignore */ } },
+    toggle() { T.stats.fs = (T.stats.fs || 0) + 1; if (FS.active()) FS.exit(); else FS.enter(); },
+  };
+  const ua = navigator.userAgent || '';
+  T.isIPhone = /iPhone|iPod/.test(ua);
+  T.isIOS = T.isIPhone || /iPad/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  T.standalone = () => { try { return !!(navigator.standalone || matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches); } catch (e) { return false; } };
+  const TIP_KEY = 'shillshock.homeTip';
+  function buildGameMode() { // title screen: fullscreen button where the API exists, else the one-time Add to Home Screen tip (iOS Safari tab)
+    const title = $('scrTitle'); if (!title) return;
+    const row = document.createElement('div'); row.className = 'tu-gm'; title.appendChild(row);
+    if (FS.available()) {
+      const b = document.createElement('button'); b.className = 'big alt tu-fsbig'; b.id = 'fsBtn'; b.textContent = '⛶ FULL SCREEN';
+      b.addEventListener('click', () => FS.toggle()); row.appendChild(b);
+      const upd = () => { b.textContent = FS.active() ? '✕ EXIT FULL SCREEN' : '⛶ FULL SCREEN'; root.classList.toggle('tu-fullscreen', FS.active()); setTimeout(layout, 60); };
+      document.addEventListener('fullscreenchange', upd); document.addEventListener('webkitfullscreenchange', upd);
+    } else if (T.isIOS && !T.standalone()) {
+      let seen = false; try { seen = localStorage.getItem(TIP_KEY) === '1'; } catch (e) { /* private mode */ }
+      if (!seen) {
+        row.innerHTML = '<div class="tu-tip" id="homeTip"><span>📲 For full screen: tap <b>Share</b> <span class="tu-share">⬆</span>, then <b>Add to Home Screen</b></span><button aria-label="dismiss tip">✕</button></div>';
+        row.querySelector('button').addEventListener('click', () => { row.innerHTML = ''; });
+        try { localStorage.setItem(TIP_KEY, '1'); } catch (e) { /* ignore */ } // one-time: shown once, then remembered
+      }
+    }
+    if (T.standalone()) root.classList.add('tu-standalone');
+  }
+
+  // ---------------------------------------------------------------- fill the screen: canvas = safe area, view width = screen aspect
+  let probe = null;
+  function insets() {
+    if (!probe) { probe = document.createElement('div'); probe.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)'; document.body.appendChild(probe); }
+    const c = getComputedStyle(probe); return { t: parseFloat(c.paddingTop) || 0, r: parseFloat(c.paddingRight) || 0, b: parseFloat(c.paddingBottom) || 0, l: parseFloat(c.paddingLeft) || 0 };
+  }
+  function layout() {
+    if (!T.on) return;
+    const g = game(), wrap = $('wrap'), vv = window.visualViewport;
+    const vw = Math.round(vv ? vv.width : innerWidth), vh = Math.round(vv ? vv.height : innerHeight), ins = insets();
+    const portrait = vh > vw;
+    const aw = Math.max(200, vw - ins.l - ins.r), ah = Math.max(150, vh - (portrait ? 0 : ins.t + ins.b * 0.5));
+    if (g && g.setViewWidth) g.setViewWidth(portrait ? MAP_W : viewWidthFor(aw, ah));
+    const cw = Math.min(aw, ah * W / H), ch = cw * H / W;
+    wrap.style.width = cw + 'px'; wrap.style.height = ch + 'px'; wrap.style.aspectRatio = W + ' / ' + H;
+    if (!portrait) { wrap.style.left = ins.l + 'px'; wrap.style.right = ins.r + 'px'; wrap.style.top = ins.t + 'px'; wrap.style.bottom = (ins.b * 0.5) + 'px'; }
+    else { wrap.style.left = wrap.style.right = wrap.style.bottom = ''; wrap.style.top = ''; }
+    T.view = { vw, vh, W, cw: Math.round(cw), ch: Math.round(ch), ins };
+    placeUtil(portrait);
+  }
+  function placeUtil(portrait) {
+    const u1 = T.util, u2 = T.util2; if (!u1) return;
+    const r = cv.getBoundingClientRect(), s = r.width / W, n1 = u1.children.length, n2 = [...u2.children].filter(e => getComputedStyle(e).display !== 'none').length;
+    const need = n => n * 46 + (n - 1) * 6;
+    for (const u of [u1, u2]) { u.style.flexDirection = 'row'; u.style.left = u.style.right = u.style.top = ''; }
+    if (portrait) { const top = r.bottom + 10; u1.style.top = u2.style.top = top + 'px'; u1.style.left = '6px'; u2.style.right = '6px'; return; }
+    if (r.top >= 54) { // letterbox room above the canvas (e.g. iPad): put the buttons there
+      u1.style.top = u2.style.top = (r.top - 52) + 'px'; u1.style.left = (r.left + 6) + 'px'; u2.style.right = (innerWidth - r.right + 6) + 'px'; return; }
+    // full-screen canvas: the gaps in the top HUD row (between the team panel and the timer, between the minimap and the wind panel)
+    const l0 = r.left + 308 * s, l1 = r.left + (W / 2 - 236) * s, r0 = r.left + (W / 2 + 236) * s, r1 = r.left + (W - 248) * s;
+    if (l1 - l0 >= need(n1) && r1 - r0 >= need(n2)) {
+      u1.style.top = u2.style.top = (r.top + 6 * s + 2) + 'px'; u1.style.left = l0 + 'px'; u2.style.right = (innerWidth - r1) + 'px';
+    } else { // narrower screens: a row under the team panel and a row under the wind panel (clear of the thumb clusters)
+      u1.style.top = (r.top + 146 * s) + 'px'; u1.style.left = (r.left + 6) + 'px';
+      u2.style.top = (r.top + 102 * s) + 'px'; u2.style.right = (innerWidth - r.right + 6) + 'px';
+    }
+  }
+  T.layout = layout;
+  let lt = 0; const relayout = () => { cancelAnimationFrame(lt); lt = requestAnimationFrame(() => { layout(); setTimeout(layout, 250); }); };
+  window.addEventListener('resize', relayout); window.addEventListener('orientationchange', relayout);
+  if (window.visualViewport) visualViewport.addEventListener('resize', relayout);
 
   // ---------------------------------------------------------------- weapon / crate item picker (feeds the number keys)
   function togglePicker(show) {
@@ -197,7 +280,7 @@
     T.on = true; T.why = why; root.classList.add('touch');
     if (!ui) build();
     picker.addEventListener('click', onPicker);
-    sync(); requestAnimationFrame(loop);
+    layout(); sync(); requestAnimationFrame(loop);
   }
   let wasPlaying = false;
   function sync() {
@@ -210,7 +293,8 @@
     ui.classList.toggle('tu-wait', !mine);
     if (!mine && held.size) releaseAll();
     if (!mine && !picker.classList.contains('hidden')) togglePicker(false);
-    ui.classList.toggle('tu-online', !!online() && !$('netchat').classList.contains('hidden'));
+    const onl = !!online() && !$('netchat').classList.contains('hidden');
+    if (onl !== ui.classList.contains('tu-online')) { ui.classList.toggle('tu-online', onl); placeUtil(innerHeight > innerWidth); }
     const portrait = innerHeight > innerWidth;
     rotate.classList.toggle('hidden', !portrait || !!T.rotateDismissed || !g || g.state !== 'play');
   }

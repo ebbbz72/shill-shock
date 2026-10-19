@@ -312,7 +312,7 @@ html.touch #netchat input { min-height: 40px; opacity: .8; }
 .tu-btn { pointer-events: auto; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1;
   min-width: 48px; min-height: 48px; width: 58px; height: 58px; padding: 0; border-radius: 16px;
-  background: rgba(20, 12, 50, 0.55); color: #fff; border: 2px solid rgba(255, 255, 255, 0.45); font-size: 24px; font-weight: bold;
+  background: rgba(20, 12, 50, 0.42); color: #fff; border: 2px solid rgba(255, 255, 255, 0.5); text-shadow: 0 1px 2px rgba(0,0,0,.6); font-size: 24px; font-weight: bold;
   box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35); backdrop-filter: blur(2px); }
 .tu-btn small { font-size: 10px; letter-spacing: 1px; margin-top: 2px; }
 .tu-btn.on, .tu-btn:active { background: rgba(255, 216, 74, 0.75); color: #1a1030; border-color: #ffd84a; }
@@ -328,8 +328,7 @@ html.touch #netchat input { min-height: 40px; opacity: .8; }
 .tu-fire { width: 74px; height: 74px; border-radius: 50%; background: rgba(255, 75, 92, 0.6); border-color: #ffb3c8; font-size: 18px; }
 .tu-arms { font-size: 20px; }
 .tu-jump, .tu-flip { font-size: 22px; }
-.tu-util { position: absolute; top: max(6px, env(safe-area-inset-top)); left: max(6px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 6px; }
-.tu-util2 { left: auto; right: max(6px, env(safe-area-inset-right)); }
+.tu-util { position: fixed; display: flex; gap: 6px; } /* placed by js/touch.js (HUD gaps / letterbox / below the canvas) */
 .tu-sm { width: 46px; height: 46px; min-width: 46px; min-height: 46px; font-size: 19px; border-radius: 12px; }
 .tu-txt { font-size: 11px; }
 .tu-chat { display: none; }
@@ -356,8 +355,13 @@ html.touch #netchat input { min-height: 40px; opacity: .8; }
   #touchUI { --tu-b: max(4vh, calc(env(safe-area-inset-bottom) + 10px)); }
   .tu-picker { bottom: auto; top: calc(env(safe-area-inset-top) + 56px + 56.25vw); right: 50%; transform: translateX(50%); width: 94vw; max-height: 60vh; }
   .tu-plist { grid-template-columns: 1fr 1fr; }
-  .tu-util { top: calc(env(safe-area-inset-top) + 64px + 56.25vw); flex-direction: row; }
-  .tu-util2 { right: max(6px, env(safe-area-inset-right)); }
   html.touch #netchat { top: auto; }
   .tu-rotate { top: calc(env(safe-area-inset-top) + 52px + 56.25vw + 64px); font-size: 12px; }
 }
+
+/* Game Mode (touch only): fullscreen button / Add to Home Screen tip on the title screen */
+.tu-gm { display: flex; justify-content: center; margin: 6px 0 0; }
+.tu-fsbig { font-size: 16px !important; padding: 8px 18px !important; }
+.tu-tip { display: flex; align-items: center; gap: 8px; background: rgba(110, 198, 255, 0.14); border: 2px solid #6ec6ff; border-radius: 14px; padding: 2px 2px 2px 12px; font-size: 14px; color: #dff3ff; text-align: left; }
+.tu-tip b { color: #fff; } .tu-share { display: inline-block; border: 1.5px solid #dff3ff; border-radius: 4px; padding: 0 4px; font-size: 12px; }
+.tu-tip button { width: 44px; height: 44px; border-radius: 50%; background: #6ec6ff; flex: none; }

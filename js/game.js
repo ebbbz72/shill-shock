@@ -53,7 +53,7 @@ class Game {
     this.particles = []; this.texts = []; this.projectiles = []; this.teams = []; this.units = [];
     this.wind = 0.3; this.shake = 0; this.showHelp = false; this.explosionCount = 0; this.turnCount = 0;
     this.onGameOver = null; this.banner = null; this.bigQuip = null;
-    this.WW = W; this.camX = 0; this.camY = 0; this.zoom = 1; this.zoomT = 1; this.camHold = false; this.paused = false; this.userPaused = false;
+    this.WW = MAP_W; this.camX = 0; this.camY = 0; this.zoom = 1; this.zoomT = 1; this.camHold = false; this.paused = false; this.userPaused = false;
     this.bot = null; this.stats = { maxTurnTime: 0 }; this.turnStartT = 0;
     this.bindInput();
   }
@@ -75,7 +75,7 @@ class Game {
     this.numTeams = numTeams; this.teamSize = Math.max(...sizes); this.teamSizes = sizes;
     const total = sizes.reduce((a, b) => a + b, 0);
     // big world (~4x the old size; camera scrolls + zooms); a little wider with lots of units
-    this.WW = opts.mapWidth > 0 ? Math.round(clamp(opts.mapWidth, W, 8000)) : Math.round(clamp(3080 + total * 70, MAP_W_MIN, MAP_W_MAX));
+    this.WW = opts.mapWidth > 0 ? Math.round(clamp(opts.mapWidth, MAP_W, 8000)) : Math.round(clamp(3080 + total * 70, MAP_W_MIN, MAP_W_MAX));
     this.setWorld(opts.world);
     this.terrain = new Terrain(opts.seed != null ? opts.seed : (Math.random() * 1e9) | 0, this.WW, this.worldId);
     this.particles = []; this.ambient = []; this.texts = []; this.projectiles = []; this.crates = []; this.beams = []; this.crateSeq = 0;
@@ -125,6 +125,15 @@ class Game {
     this.worldId = resolveWorld(id); this.world = WORLDS[this.worldId];
     this.bg = this.worldBg(this.worldId);
     const cy = this.world.cloudY || [60, 260]; this.clouds.forEach(c => { c.y = rand(cy[0], cy[1]); });
+  }
+  // touch devices: change the view width (screen aspect) at runtime, e.g. on rotation or a Safari toolbar resize
+  setViewWidth(nw) {
+    nw = Math.round(nw); if (!(nw >= MAP_W) || nw === W) return false;
+    W = nw; this.cv.width = W; // the 3D canvas is sized by its renderer (resize below)
+    this.bgCache = {}; this.bg = this.worldBg(this.worldId || 'classic');
+    this.camX = this.clampCam(this.camX);
+    if (this.r3d && this.r3d.camera) { this.r3d.camera.aspect = W / H; this.r3d.camera.updateProjectionMatrix(); this.r3d.resize(); }
+    return true;
   }
   worldBg(id) { return this.bgCache[id] || (this.bgCache[id] = makeBackground(7 + id.length * 31, id)); }
 
@@ -1502,7 +1511,7 @@ class Game {
 
     // help hint
     ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = `bold 12px ${FONT}`;
-    ctx.fillText('hold ENTER: jump (BKSP flip, 1/turn) · H help · M mute · P pause · A/D, drag, edge: pan · wheel/+/-: zoom · C', W - 14, 152);
+    if (!(window.TouchUI && TouchUI.on)) ctx.fillText('hold ENTER: jump (BKSP flip, 1/turn) · H help · M mute · P pause · A/D, drag, edge: pan · wheel/+/-: zoom · C', W - 14, 152); // keyboard hint (not on touch)
     ctx.font = `bold 12px ${FONT}`; ctx.fillStyle = this.world.color; ctx.fillText('WORLD: ' + this.world.name, W - 14, 84);
     if (Math.abs(this.zoom - 1) > 0.02) { ctx.fillStyle = '#fff'; ctx.fillText(`ZOOM ${Math.round(this.zoom * 100)}%  (0 resets)`, W - 14, 100); }
     if (this.WW > W) this.drawMinimap(ctx);
@@ -1590,7 +1599,7 @@ class Game {
       ['Hold JUMP', 'Charge a jump: tap = hop, hold ~1 s = big jump (1/turn)'], ['Hold FLIP', 'Charged backflip (higher, slightly back)'], ['ARMS · tap weapon bar', 'Pick an attack, defense or crate item'], ['Defense picked', 'FIRE uses it (lasts until your team\'s next turn)'],
       ['1-finger drag on map', 'Pan camera · ◎ recenters'],
       ['Pinch', 'Zoom in / out · tap the minimap to look there'],
-      ['⏸ · ? · 💬 · 3D/2D', 'Menu / pause · this help · chat (online) · view'],
+      ['⏸ · ? · 💬 · 3D/2D · ⛶', 'Menu / pause · help · chat (online) · view · full screen'],
     ] : [
       ['← →', 'Walk'], ['↑ ↓', 'Aim angle'], ['Hold SPACE', 'Charge power — release to fire'],
       ['Hold ENTER', 'Charge a jump: tap = hop, hold ~1 s = big jump (1/turn)'], ['Hold BACKSPACE', 'Charged backflip (higher, slightly back)'], ['1 2 3  /  Q E', 'Attacks: Bazooka, Grenade, ★ special'], ['4 5', 'Defenses: Brace, ★ special — SPACE to use'],
