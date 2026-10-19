@@ -42,6 +42,7 @@ const server = http.createServer((req, res) => {
 });
 
 // ---------------- rooms ----------------
+const TEAM_NAMES = ['Team 1', 'Team 2'];
 const rooms = new Map(); // code -> room
 const rid = n => crypto.randomBytes(n).toString('hex');
 function newCode() {
@@ -63,11 +64,21 @@ function makeRoom() {
 }
 const connected = room => room.players.filter(p => p.ws);
 const humansOn = (room, ti) => room.players.filter(p => p.team === ti);
+// a player can control several characters on their team (p.n, 1..team size; p.chars = one character type each)
+const unitsOf = p => Math.max(1, p.n | 0 || 1);
+const usedOn = (room, ti, except) => humansOn(room, ti).filter(p => p !== except).reduce((a, p) => a + unitsOf(p), 0);
+function setCount(p, n) { p.n = n; p.chars = Array.from({ length: n }, (_, i) => (p.chars && p.chars[i]) || p.char || CHARS[0]); p.char = p.chars[0]; }
+// the team's human slots, interleaved by owner (A1, B1, A2, B2 ...) so one player's characters don't all go back to back
+function slotsOf(room, ti) {
+  const hs = humansOn(room, ti), out = [], max = Math.max(0, ...hs.map(unitsOf));
+  for (let k = 0; k < max; k++) for (const p of hs) if (unitsOf(p) > k) out.push({ p, k });
+  return out;
+}
 function send(ws, msg) { if (ws && ws.readyState === 1) ws.send(typeof msg === 'string' ? msg : JSON.stringify(msg)); }
 function broadcast(room, msg, exceptPid) { const s = JSON.stringify(msg); for (const p of room.players) if (p.pid !== exceptPid) send(p.ws, s); }
 function lobbyState(room) {
   return { t: 'lobby', code: room.code, hostPid: room.hostPid, inGame: room.inGame, maxPlayers: MAX_PLAYERS, ...room.L,
-    players: room.players.map(p => ({ pid: p.pid, name: p.name, team: p.team, char: p.char, ready: p.ready, connected: !!p.ws })) };
+    players: room.players.map(p => ({ pid: p.pid, name: p.name, team: p.team, char: p.char, n: unitsOf(p), chars: (p.chars || [p.char]).slice(0, unitsOf(p)), ready: p.ready, connected: !!p.ws })) };
 }
 const pushLobby = room => broadcast(room, lobbyState(room));
 function sysChat(room, text) { const m = { t: 'chat', name: '', text, sys: true }; room.chat.push(m); if (room.chat.length > 40) room.chat.shift(); broadcast(room, m); }
@@ -75,11 +86,13 @@ function sysChat(room, text) { const m = { t: 'chat', name: '', text, sys: true 
 // team with the fewest humans that still has room (or -1 = spectator)
 function autoTeam(room) {
   let best = -1, bestN = 99;
-  for (let i = 0; i < room.L.numTeams; i++) { const n = humansOn(room, i).length, free = room.L.sizes[i] - n; if (free > 0 && n < bestN) { best = i; bestN = n; } }
+  for (let i = 0; i < room.L.numTeams; i++) { const n = humansOn(room, i).length, free = room.L.sizes[i] - usedOn(room, i); if (free > 0 && n < bestN) { best = i; bestN = n; } }
   return best;
 }
 // -1 = needs a team (auto-placed), -2 = spectating by choice
-function fixTeams(room) { for (const p of room.players) if (p.team >= room.L.numTeams) p.team = -1; for (const p of room.players) if (p.team === -1) p.team = autoTeam(room); }
+function fixTeams(room) { for (const p of room.players) if (p.team >= room.L.numTeams) p.team = -1; for (const p of room.players) if (p.team === -1) { setCount(p, 1); p.team = autoTeam(room); } }
+// moving onto a team: keep as many of the player's characters as fit (at least 1), else refuse
+function fitOn(room, p, ti) { const free = room.L.sizes[ti] - usedOn(room, ti, p); if (free < 1) return false; if (unitsOf(p) > free) setCount(p, free); return true; }
 
 function pickHost(room) {
   const c = room.players.find(p => p.ws);
@@ -92,17 +105,26 @@ function lobbyAction(room, p, m) {
   if (room.inGame) return 'game in progress';
   const a = m.a;
   // mixed teams: every unit has its own character; duplicates allowed, on either team
-  if (a === 'pick') { const ch = String(m.char); if (!CHARS.includes(ch)) return 'bad character'; p.char = ch; return null; } // my own unit's character
+  // character of one of a player's units: { char, i = unit index, pid = (host only) someone else's }
+  const target = m.pid && m.pid !== p.pid ? (isHost ? room.players.find(q => q.pid === m.pid) : null) : p;
+  if (a === 'pick') { const ch = String(m.char); if (!CHARS.includes(ch)) return 'bad character'; if (!target) return 'only the host can change that';
+    const i = Math.max(0, Math.min(unitsOf(target) - 1, m.i | 0)); setCount(target, unitsOf(target)); target.chars[i] = ch; target.char = target.chars[0]; return null; }
+  if (a === 'count') { // how many characters a player controls (own slot, or the host for anyone)
+    if (!target) return 'only the host can change that';
+    const ti = target.team; if (ti < 0 || ti >= L.numTeams) return 'join a team first';
+    const n = Math.max(1, Math.min(L.sizes[ti], m.v | 0)); if (usedOn(room, ti, target) + n > L.sizes[ti]) return `${TEAM_NAMES[ti]} has room for ${L.sizes[ti] - usedOn(room, ti, target)} more`;
+    setCount(target, n); target.ready = false; return null;
+  }
   if (a === 'join') { // a player joins either team (any character), if it has room
     const ti = m.team | 0; if (ti < 0 || ti >= L.numTeams) return 'bad team';
-    if (p.team !== ti && humansOn(room, ti).length >= L.sizes[ti]) return 'that team is full';
+    if (p.team !== ti && !fitOn(room, p, ti)) return 'that team is full';
     p.team = ti; p.ready = false; return null;
   }
   if (!isHost) return 'only the host can change that';
   if (a === 'teams') return 'Shill Shock is always 2 teams';
   if (a === 'size') { // units on one team (2-6); { team, v }; without team: both teams
     const s = Math.max(MIN_SIZE, Math.min(MAX_SIZE, m.v | 0)), which = m.team === 0 || m.team === 1 ? [m.team] : [0, 1];
-    for (const i of which) if (humansOn(room, i).length > s) return `team ${i + 1} has more than ${s} players`;
+    for (const i of which) if (usedOn(room, i) > s) return `team ${i + 1} has more than ${s} player characters`;
     for (const i of which) L.sizes[i] = s;
     L.teamSize = Math.max(...L.sizes); fixTeams(room); return null;
   }
@@ -120,7 +142,7 @@ function lobbyAction(room, p, m) {
     const x = room.players.find(q => q.pid === m.pid), ti = m.team | 0; if (!x) return 'no such player';
     if (ti === -2) { x.team = -2; x.ready = false; return null; }
     if (ti < 0 || ti >= L.numTeams) return 'bad team';
-    if (x.team !== ti && humansOn(room, ti).length >= L.sizes[ti]) return 'that team is full';
+    if (x.team !== ti && !fitOn(room, x, ti)) return 'that team is full';
     x.team = ti; x.ready = false; return null;
   }
   if (a === 'cpu') { // host sets the bot difficulty of an empty slot
@@ -146,11 +168,10 @@ function startCheck(room) {
 function buildStart(room) {
   const L = room.L, teams = L.teams.slice(0, L.numTeams);
   const world = L.world === 'random' ? THEMED[crypto.randomInt(THEMED.length)] : L.world;
-  const units = teams.map((t, ti) => {
-    const hs = humansOn(room, ti);
-    return Array.from({ length: L.sizes[ti] }, (_, i) => hs[i] ? { ctrl: 'human', player: hs[i].name, pid: hs[i].pid } : { ctrl: t.cpu[i] || 'medium' });
-  });
-  const chars = teams.map((t, ti) => { const hs = humansOn(room, ti); return Array.from({ length: L.sizes[ti] }, (_, i) => hs[i] ? hs[i].char : t.cpuChar[i]); });
+  const slots = teams.map((t, ti) => slotsOf(room, ti));
+  const units = teams.map((t, ti) => Array.from({ length: L.sizes[ti] }, (_, i) => { const s = slots[ti][i];
+    return s ? Object.assign({ ctrl: 'human', player: s.p.name, pid: s.p.pid }, unitsOf(s.p) > 1 ? { num: s.k + 1 } : {}) : { ctrl: t.cpu[i] || 'medium' }; }));
+  const chars = teams.map((t, ti) => Array.from({ length: L.sizes[ti] }, (_, i) => { const s = slots[ti][i]; return s ? ((s.p.chars && s.p.chars[s.k]) || s.p.char) : t.cpuChar[i]; }));
   return {
     seed: crypto.randomInt(1e9), world, teamSize: L.teamSize, teamSizes: L.sizes.slice(), turnTime: L.turnTime, teamIds: chars.map(c => c[0]), chars,
     controllers: units.map(us => us.some(u => u.ctrl === 'human') ? 'human' : us[0].ctrl), units, gameId: rid(4),
@@ -192,7 +213,7 @@ wss.on('connection', (ws) => {
           if (gone) room.players = room.players.filter(x => x !== gone);
           else { err(`lobby is full (${MAX_PLAYERS} players)`); room = null; return; }
         }
-        p = { pid: rid(4), token: rid(12), name, ws, team: -1, ready: false, char: CHARS[crypto.randomInt(CHARS.length)] };
+        p = { pid: rid(4), token: rid(12), name, ws, team: -1, ready: false, char: CHARS[crypto.randomInt(CHARS.length)], n: 1 }; p.chars = [p.char];
         room.players.push(p);
         p.team = room.inGame ? -2 : autoTeam(room); // mid-game newcomers spectate until the next game
       }

@@ -430,7 +430,7 @@
   // turn announcement (touch): "Player: Character, Team" in the team colour, ~1.8 s, centred in the free band
   T.bannerText = g => { const u = g.cur, team = u && u.team; if (!u || !team) return '';
     const who = u.player || team.player || u.name, ch = (u.def0 && u.def0.name) || u.char || u.name;
-    return `${who}: ${ch}, ${team.name}`; };
+    return `${who}: ${ch}${u.num && u.player ? ' #' + u.num : ''}, ${team.name}`; };
   if (typeof Game !== 'undefined') Game.prototype.drawTouchBanner = function (ctx) {
     const b = this.banner, now = performance.now();
     if (b._seen == null) { b._seen = now; b._text = T.bannerText(this); b._color = this.cur && this.cur.team ? this.cur.team.color : b.color; }

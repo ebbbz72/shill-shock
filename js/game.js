@@ -105,7 +105,7 @@ class Game {
       if (uc) team.units.forEach((u, i) => {
         const c = uc[i]; if (!c) return;
         u.ctrl = CONTROLLERS[c.ctrl] ? c.ctrl : 'medium'; u.pid = c.pid || null;
-        if (u.ctrl === 'human' && c.player) { u.player = String(c.player).slice(0, 12); u.name = u.player; }
+        if (u.ctrl === 'human' && c.player) { u.player = String(c.player).slice(0, 12); u.name = u.player; if (c.num) { u.num = c.num | 0; u.name = u.player + ' #' + u.num; } } // several characters per player get distinct labels
       });
       team.alive = () => team.units.some(u => !u.dead);
       return team;
@@ -233,7 +233,7 @@ class Game {
     this.turnStartT = this.t;
     this.camHold = false;
     this.bot = !this.mirror && team.controller !== 'human' && typeof BotTurn !== 'undefined' ? new BotTurn(this, team.controller) : null;
-    this.banner = { text: `Round ${this.round} — ` + (team.player ? `${team.player}'s turn (${team.name})` : `${team.name}: ${this.cur.name}`), sub: (team.player ? this.cur.name + ' · ' : '') + this.cur.char + (team.controller !== 'human' ? `  ·  CPU ${CPU_LEVEL[team.controller]}` : '') + `  ·  ${team.name} turn ${this.roundTurn} of ${this.roundOf} this round`, color: team.color, t: this.turnCount === 1 ? 3.2 : 2.2, world: this.world.name, wcol: this.world.color, first: this.turnCount === 1 };
+    this.banner = { text: `Round ${this.round} — ` + (team.player && this.cur.num ? `${team.player}: ${this.cur.char} #${this.cur.num}, ${team.name}` : team.player ? `${team.player}'s turn (${team.name})` : `${team.name}: ${this.cur.name}`), sub: (team.player ? this.cur.name + ' · ' : '') + this.cur.char + (team.controller !== 'human' ? `  ·  CPU ${CPU_LEVEL[team.controller]}` : '') + `  ·  ${team.name} turn ${this.roundTurn} of ${this.roundOf} this round`, color: team.color, t: this.turnCount === 1 ? 3.2 : 2.2, world: this.world.name, wcol: this.world.color, first: this.turnCount === 1 };
     if (this.newRound && this.cratesOn && !this.mirror && this.spawnCrates) this.spawnCrates(CRATES_PER_ROUND); // supply drop every round
     if (this.cur.poison && this.gasTick) this.gasTick(this.cur);
   }

@@ -181,6 +181,9 @@
     for (let ti = 0; ti < l.numTeams; ti++) {
       // team identity = team colour; every slot has its own character (mixed teams, duplicates allowed)
       const t = l.teams[ti], ts = TEAM_STYLE[ti], hs = l.players.filter(p => p.team === ti);
+      // each player may control several characters (p.n); slots interleave owners like the server (A1, B1, A2, B2 ...)
+      const nOf = p => Math.max(1, p.n | 0 || 1), slots = [];
+      for (let k = 0, mx = Math.max(0, ...hs.map(nOf)); k < mx; k++) hs.forEach(p => { if (nOf(p) > k) slots.push({ p, k }); });
       const card = document.createElement('div'); card.className = 'olteam'; card.style.setProperty('--tc', ts.color);
       const head = document.createElement('div'); head.className = 'th';
       const joinBtn = mine && mine.team !== ti ? `<button class="qbtn oljoin" data-join="${ti}">Join ${ts.name}</button>` : '';
@@ -188,14 +191,16 @@
         (host ? `<div class="olbotq"><span class="optlbl">BOTS</span>${charSel(`data-botall="${ti}" title="All bots on this team the same"`, '')}<button class="qbtn" data-botrand="${ti}">Randomize</button></div>` : ''));
       card.append(head);
       for (let s = 0; s < sizes[ti]; s++) {
-        const p = hs[s], row = document.createElement('div');
-        const c = p ? (p.char || 'DOGE') : (t.cpuChar[s] || 'DOGE');
+        const sl = slots[s], p = sl && sl.p, k = sl ? sl.k : 0, row = document.createElement('div');
+        const c = p ? ((p.chars && p.chars[k]) || p.char || 'DOGE') : (t.cpuChar[s] || 'DOGE');
         const cv = document.createElement('canvas'); cv.width = 64; cv.height = 52; cv.className = 'olpc'; teamCanvases.push({ cv, id: c, i: ti * 6 + s });
         if (p) {
           row.className = 'olslot' + (p.pid === O.pid ? ' me' : '') + (p.connected ? '' : ' off');
           const tags = (p.pid === l.hostPid ? '<span class="tag host">HOST</span>' : p.ready ? '<span class="tag">READY</span>' : '<span class="tag no">not ready</span>') + (p.connected ? '' : '<span class="tag no">offline</span>');
           const ctl = host ? `<select data-move="${p.pid}">${Array.from({ length: l.numTeams }, (_, j) => `<option value="${j}"${j === ti ? ' selected' : ''}>Team ${j + 1}</option>`).join('')}<option value="-2">Spectate</option></select>${p.pid !== O.pid ? `<button class="qbtn" data-kick="${p.pid}" title="remove">✕</button>` : ''}` : '';
-          row.innerHTML = `<span class="nm">${esc(p.name)}${p.pid === O.pid ? ' (you)' : ''}</span>${chip(c)}${tags}${ctl}`;
+          const mayEdit = host || p.pid === O.pid, multi = nOf(p) > 1;
+          const cnt = k === 0 && mayEdit ? `<select data-cnt="${p.pid}" title="characters this player controls">${Array.from({ length: sizes[ti] }, (_, j) => `<option value="${j + 1}"${j + 1 === nOf(p) ? ' selected' : ''}>×${j + 1}</option>`).join('')}</select>` : '';
+          row.innerHTML = `<span class="nm">${esc(p.name)}${multi ? ' #' + (k + 1) : ''}${p.pid === O.pid ? ' (you)' : ''}</span>${mayEdit ? charSel(`data-pc="${p.pid}:${k}"`, c) : chip(c)}${k === 0 ? tags + cnt + ctl : ''}`;
         } else {
           row.className = 'olslot cpu';
           const lv = t.cpu[s] || 'medium';
@@ -212,6 +217,8 @@
     tEl.querySelectorAll('select[data-botchar]').forEach(s => s.addEventListener('change', () => { const [ti, si] = s.dataset.botchar.split(':'); act('botchar', { team: +ti, slot: +si, char: s.value }); }));
     tEl.querySelectorAll('select[data-botall]').forEach(s => { s.insertAdjacentHTML('afterbegin', '<option value="" selected>All same…</option>'); s.addEventListener('change', () => { if (s.value) act('botchars', { team: +s.dataset.botall, char: s.value }); }); });
     tEl.querySelectorAll('button[data-botrand]').forEach(b => b.addEventListener('click', () => act('botchars', { team: +b.dataset.botrand, char: 'random' })));
+    tEl.querySelectorAll('select[data-pc]').forEach(s => s.addEventListener('change', () => { const [pid, k] = s.dataset.pc.split(':'); act('pick', { pid, i: +k, char: s.value }); }));
+    tEl.querySelectorAll('select[data-cnt]').forEach(s => s.addEventListener('change', () => act('count', { pid: s.dataset.cnt, v: +s.value })));
     tEl.querySelectorAll('button[data-join]').forEach(b => b.addEventListener('click', () => act('join', { team: +b.dataset.join })));
     tEl.querySelectorAll('select[data-move]').forEach(s => s.addEventListener('change', () => act('move', { pid: s.dataset.move, team: +s.value })));
     tEl.querySelectorAll('select[data-cpu]').forEach(s => s.addEventListener('change', () => { const [ti, si] = s.dataset.cpu.split(':'); act('cpu', { team: +ti, slot: +si, v: s.value }); }));
@@ -227,7 +234,7 @@
     $('olReady').textContent = mine && mine.ready ? 'NOT READY' : 'READY';
     $('olStart').classList.toggle('hidden', !host);
     $('olStart').disabled = !!prob;
-    const humans = l.players.filter(p => p.team >= 0 && p.team < l.numTeams).length, bots = sizes[0] + sizes[1] - humans;
+    const onT = l.players.filter(p => p.team >= 0 && p.team < l.numTeams), humans = onT.length, bots = sizes[0] + sizes[1] - onT.reduce((a, p) => a + Math.max(1, p.n | 0 || 1), 0);
     status(prob ? prob : host ? `Everyone's ready: ${humans} player${humans > 1 ? 's' : ''} + ${bots} bot${bots === 1 ? '' : 's'} (${sizes[0]} v ${sizes[1]}). Press START!` : 'Ready! Waiting for the host to start.');
   }
   $('olReady').addEventListener('click', () => { const m = me(); SFX.select(); send({ t: 'ready', v: !(m && m.ready) }); });
