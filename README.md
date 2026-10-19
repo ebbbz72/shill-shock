@@ -202,7 +202,10 @@ On phones and tablets the touch UI turns on by itself. It is detected by `(point
 | Hold FIRE, lift | Charge power and fire. With a defense selected, FIRE uses it |
 | Hold JUMP / FLIP, lift | Charged jump / backflip |
 | Weapon bar (2 rows, bottom centre) | Tap to select. Row 1: the 5 base slots (attacks, defenses, ★ specials with uses left). Row 2: your CRATE ITEMS (scrolls sideways if you hoard). Selected = gold, used up = greyed out |
-| 2 fingers: pinch · drag | Zoom · pan (any time). When it isn't your turn, 1 finger pans too. Tap the minimap to look there. ◎ recenters |
+| 2 fingers: pinch · drag | Zoom · pan (any time). When it isn't your turn, 1 finger pans too. Tap the minimap to look there |
+| Camera button (⤢ / ◎, top left) | ⤢ fits the whole map in view; ◎ recenters on the active character. After any manual pan the camera stays put until the next shot or turn |
+
+**Touch camera:** lots of sky headroom (you can pan ~420 px above the map's top, so high shots, falling crates and characters on peaks are never stuck under the top HUD), a margin past both map edges, and you can zoom out until the whole map fits between the HUD rows. 2D and 3D both. Desktop camera limits are unchanged.
 | Meters above ◀ ▶ | Angle, JUMP ready, POWER (fills live while FIRE is held) and STEPS left |
 | ⏸ · ? · 💬 · ⛶ | Menu (resume / pause / help / quit) · help · chat (online) · full screen |
 | 💬 (online) | Opens the chat panel: recent history (scrolls), a message box (tap it for the keyboard) and SEND. Send, ✕ or a tap outside closes it. A red badge counts messages that arrived while it was closed. The left chat log isn't shown on touch |

@@ -33,6 +33,7 @@ function rand(a, b) { return a + Math.random() * (b - a); }
 function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 
+const TOUCH_HEAD = 420, TOUCH_EDGE = 160; // touch camera only: world px of headroom above y=0, canvas px of margin past the map's sides
 class Unit {
   constructor(team, name, idx) {
     this.team = team; this.name = name; this.idx = idx;
@@ -302,7 +303,7 @@ class Game {
   }
 
   // ---------- camera (shared by 2D and 3D) ----------
-  minZoom() { return Math.min(1, W / (this.WW + 120)); } // fully zoomed out = the whole map width
+  minZoom() { return this.viewPad ? Math.min(1, W / (this.WW + 120), (H - this.viewPad.top - this.viewPad.bot) / (H + TOUCH_HEAD * 0.6)) : Math.min(1, W / (this.WW + 120)); } // fully zoomed out = the whole map width (touch: and its height inside the free band)
   viewW() { return W / this.zoom; }
   viewH() { return H / this.zoom; }
   zoomBy(f, at) {
@@ -316,7 +317,7 @@ class Game {
   recenter() { this.camHold = false; }
   clampCamY(y) {
     const vp = this.viewPad; // touch mode only: room for the top HUD row / bottom weapon rows (js/touch.js)
-    if (vp) { const z = this.zoom, lo = -vp.top / z, hi = H - this.viewH() + vp.bot / z; return lo > hi ? (lo + hi) / 2 : clamp(y, lo, hi); }
+    if (vp) { const z = this.zoom, lo = -vp.top / z - TOUCH_HEAD, hi = H - this.viewH() + vp.bot / z; return lo > hi ? (lo + hi) / 2 : clamp(y, lo, hi); } // TOUCH_HEAD: sky headroom above the map
     const vh = this.viewH(); return vh >= H ? H - vh : clamp(y, 0, H - vh);
   }
   camYTarget() {
@@ -620,7 +621,11 @@ class Game {
     }
   }
 
-  clampCam(x) { const vw = this.viewW(); return vw >= this.WW ? (this.WW - vw) / 2 : clamp(x, 0, this.WW - vw); }
+  clampCam(x) {
+    const vw = this.viewW();
+    if (this.viewPad) { const m = TOUCH_EDGE / this.zoom; return vw >= this.WW + 2 * m ? (this.WW - vw) / 2 : clamp(x, -m, this.WW - vw + m); } // touch: a margin past both edges (side buttons)
+    return vw >= this.WW ? (this.WW - vw) / 2 : clamp(x, 0, this.WW - vw);
+  }
   camTarget() {
     const p = this.projectiles.find(q => !q.dead);
     const fx = p ? p.x : this.cur ? this.cur.x : this.WW / 2;

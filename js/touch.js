@@ -48,7 +48,7 @@
 
   // ---------------------------------------------------------------- DOM
   function el(tag, cls, html, parent) { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; (parent || ui).appendChild(e); return e; }
-  let ui, bar, meters, rotate, sheet;
+  let ui, bar, meters, rotate, sheet, camBtn;
   function build() {
     ui = document.createElement('div'); ui.id = 'touchUI'; ui.className = 'hidden'; document.body.appendChild(ui);
     const left = el('div', 'tu-cl tu-left'), right = el('div', 'tu-cl tu-right'), util = el('div', 'tu-util'), util2 = el('div', 'tu-util tu-util2');
@@ -62,7 +62,7 @@
     hold(el('button', 'tu-btn tu-fire', 'FIRE<small>hold</small>', colA), ' ', 'fire');
     // utility row: pause/menu, recenter, view, help, chat
     tap(el('button', 'tu-btn tu-sm', '⏸', util), () => openSheet()).dataset.tu = 'menu';
-    tap(el('button', 'tu-btn tu-sm', '◎', util), () => tapKey('c')).dataset.tu = 'recenter';
+    camBtn = tap(el('button', 'tu-btn tu-sm tu-cam', '⤢', util), () => camCycle()); camBtn.dataset.tu = 'recenter'; // camera: fit whole map ⇄ recenter
     tap(el('button', 'tu-btn tu-sm', '?', util2), () => tapKey('h')).dataset.tu = 'help';
     const chat = el('button', 'tu-btn tu-sm tu-chat', '💬<i class="tu-badge hidden" id="tuChatBadge"></i>', util2); chat.dataset.tu = 'chat';
     if (FS.available()) tap(el('button', 'tu-btn tu-sm tu-fs', '⛶', util2), () => FS.toggle()).dataset.tu = 'fullscreen';
@@ -300,6 +300,19 @@
   function chatClose() { if (!chatP) return; const i = chatP.querySelector('input'); if (document.activeElement === i) i.blur(); chatP.classList.add('hidden'); chatBack.classList.add('hidden'); }
   T.chatOpen = chatOpen; T.chatClose = chatClose; T.unread = () => unread;
 
+  // camera button: following the action -> fit the whole map (held until the next shot / turn); held or panned -> recenter
+  function camCycle() {
+    const g = game(); if (!g || !g.cur) return;
+    T.stats.cam = (T.stats.cam || 0) + 1;
+    if (g.camHold) { g.recenter(); g.zoomT = Math.max(g.minZoom(), TOUCH_ZOOM); T.camMode = 'follow'; return; }
+    const vp = g.viewPad || { top: 0, bot: 0 };
+    g.camHold = true; g.zoom = g.zoomT = g.minZoom();
+    g.camX = g.clampCam(g.WW / 2 - g.viewW() / 2);
+    g.camY = g.clampCamY(300 - ((vp.top + H - vp.bot) / 2) / g.zoom); // map centre (sky to sea) in the free band
+    T.camMode = 'fit';
+  }
+  T.camCycle = camCycle;
+
   function openSheet() { sheet.classList.remove('hidden'); }
 
   // ---------------------------------------------------------------- canvas gestures: drag-aim, pan, pinch zoom, minimap
@@ -408,6 +421,7 @@
     ui.classList.toggle('tu-help', !!g.showHelp); // help card open: the weapon bar steps aside (GOT IT button)
     ui.classList.toggle('tu-def', !!(g.cur && (WEAPONS[(g.teams[g.turnTeam] || { weapons: [] }).weapons[(g.teams[g.turnTeam] || {}).weaponIdx]] || {}).kind === 'defense'));
     updateBar();
+    if (camBtn) { const nx = g.camHold ? '◎' : '⤢'; if (camBtn.textContent !== nx) { camBtn.textContent = nx; camBtn.setAttribute('aria-label', g.camHold ? 'recenter on the active character' : 'fit the whole map'); } }
     const onl = !!online() && !$('netchat').classList.contains('hidden');
     if (onl !== ui.classList.contains('tu-online')) { ui.classList.toggle('tu-online', onl); placeUtil(innerHeight > innerWidth); }
     const portrait = innerHeight > innerWidth;

@@ -354,7 +354,7 @@ class Renderer3D {
       const lead = clamp(p.vx * 0.22, -160, 160), sx = c.launch.x, span = Math.abs(p.x + lead - sx) + 420;
       zoom = clamp(W * 0.95 / span, big ? 0.6 : 0.82, 1.12);
       const w = zoom < 1.05 ? 0.62 : 1; tx = sx + (p.x + lead - sx) * w;
-      ty = (clamp(p.y, -200, 640) + (c.launch.y - 30)) * 0.5 * 0.6 + H / 2 * 0.4; pitch = 0.2;
+      ty = (clamp(p.y, g.viewPad ? -600 : -200, 640) + (c.launch.y - 30)) * 0.5 * 0.6 + H / 2 * 0.4; pitch = 0.2;
       c.hold = { x: p.x, y: p.y, t: this.time };
     } else if (g.phase === 'settle' && c.hold) {
       if (c.boom && c.boom.t >= c.hold.t - 0.25) { c.hold.x = c.boom.x; c.hold.y = c.boom.y; }
@@ -368,7 +368,7 @@ class Renderer3D {
       const ws = g.units.filter(q => !q.dead && g.winner === q.team);
       if (ws.length) { tx = ws.reduce((a, q) => a + q.x, 0) / ws.length; ty = ws.reduce((a, q) => a + q.y, 0) / ws.length - 30; zoom = 1.35; pitch = 0.22; }
     }
-    if (g.camHold && !p) { tx = g.camX + (g.viewW ? g.viewW() : W) / 2; ty = H / 2; zoom = Math.min(zoom, 1); }
+    if (g.camHold && !p) { tx = g.camX + (g.viewW ? g.viewW() : W) / 2; ty = g.viewPad ? g.camY + g.viewH() / 2 : H / 2; zoom = g.viewPad ? 1 : Math.min(zoom, 1); } // touch: vertical pan too
     zoom *= g.zoom || 1; // player zoom (wheel / + -), shared with the 2D view
     // match intro: start on an overview of the whole map, then glide in
     if (c.intro > 0 && (p || g.charging || g.camHold)) c.intro = Math.min(c.intro, 0.5);
@@ -397,8 +397,13 @@ class Renderer3D {
     // keep the framing inside the map (with a little margin) unless we are zoomed out past it
     const WW = g.terrain ? g.terrain.w : W, halfW = W / 2 / c.zoom, halfH = H / 2 / c.zoom;
     if (!this.focus) {
+      if (g.viewPad) { // touch: wider side margins and lots of sky headroom (the top HUD band covers the top of the picture)
+        const m = 80 + TOUCH_EDGE / c.zoom; tx = WW + 2 * m > halfW * 2 ? clamp(tx, halfW - m, WW - halfW + m) : WW / 2;
+        ty = clamp(ty, Math.min(H / 2, -170 - TOUCH_HEAD + halfH), Math.max(H / 2, H + 40 - halfH));
+      } else {
       tx = WW + 160 > halfW * 2 ? clamp(tx, halfW - 80, WW - halfW + 80) : WW / 2;
       ty = clamp(ty, Math.min(H / 2, -170 + halfH), Math.max(H / 2, H + 40 - halfH));
+      }
     }
     const kx = c.x == null || this.snapCam ? 1 : 1 - Math.exp(-dt * (g.projectiles.length ? 5 : 3.2));
     c.x = c.x == null ? tx : c.x + (tx - c.x) * kx; c.y += (ty - c.y) * (this.snapCam ? 1 : k); if (this.snapCam || (this.focus && this.focus.snap)) { c.x = tx; c.y = ty; c.zoom = zoom; c.pitch = pitch; c.yaw = yaw; this.snapCam = false; }
