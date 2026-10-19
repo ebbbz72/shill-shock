@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Shill Shock — Memecoin Artillery</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game3d" width="1280" height="720"></canvas>
+  <canvas id="game" width="1280" height="720"></canvas>
+
+  <div id="menu" class="overlay">
+    <!-- 1. title -->
+    <div class="card screen" id="scrTitle" data-step="title">
+      <h1>SHILL SHOCK</h1>
+      <h2>Memecoin Artillery</h2>
+      <canvas id="menuArt" width="840" height="184"></canvas>
+      <p class="kit">Worms-style artillery with memecoin mascots. Everyone shares <b>Bazooka</b> · <b>Grenade</b> · <b>Brace</b>, plus one ★ special attack and one ★ special defense per character.</p>
+      <div class="row titlebtns"><button id="playBtn" class="big">PLAY</button><button id="onlineBtn" class="big online">PLAY ONLINE</button></div>
+      <p class="hint">Press <b>Enter</b> to play locally · <b>Play Online</b>: up to 12 people (6 v 6), each in their own browser</p>
+      <p class="tiny">Parody game. All characters are original drawings; no affiliation with any coin or project. Not financial advice.</p>
+    </div>
+
+    <!-- 2. page 1: match setup (who plays) -->
+    <div class="card screen hidden wide" id="scrLobby" data-step="lobby">
+      <div class="stephead"><span class="stepno">STEP 1 / 2</span><h3>MATCH SETUP</h3><span class="stepsub">Who plays? Humans + bots on each team, 2-6 units per team</span></div>
+      <div class="setupgrid">
+          <div class="teambox" id="teamBox0" data-t="0">
+            <div class="tbhead"><span class="teamtag" id="teamTag0">TEAM 1</span><span class="tsize" id="tsize0">3 units</span></div>
+            <div class="lrow" data-row="0"><span class="llabel">Players <small>(humans)</small></span>
+              <div class="stepper"><button class="stp" id="hum0Minus" aria-label="fewer players">−</button><span class="stpv" id="hum0Val">1</span><button class="stp" id="hum0Plus" aria-label="more players">+</button></div></div>
+            <div class="lrow" data-row="1"><span class="llabel">Bots</span>
+              <div class="stepper"><button class="stp" id="bot0Minus" aria-label="fewer bots">−</button><span class="stpv" id="bot0Val">1</span><button class="stp" id="bot0Plus" aria-label="more bots">+</button></div></div>
+            <div class="lrow" data-row="2"><span class="llabel">Bot skill</span>
+              <div class="seg lvlseg" id="lvlSeg0"><button class="sbtn" data-t="0" data-v="easy">Easy</button><button class="sbtn" data-t="0" data-v="medium">Medium</button><button class="sbtn" data-t="0" data-v="hard">Hard</button><button class="sbtn" data-t="0" data-v="pro">Pro</button></div></div>
+          </div>
+          <div class="teambox" id="teamBox1" data-t="1">
+            <div class="tbhead"><span class="teamtag" id="teamTag1">TEAM 2</span><span class="tsize" id="tsize1">3 units</span></div>
+            <div class="lrow" data-row="3"><span class="llabel">Players <small>(humans)</small></span>
+              <div class="stepper"><button class="stp" id="hum1Minus" aria-label="fewer players">−</button><span class="stpv" id="hum1Val">1</span><button class="stp" id="hum1Plus" aria-label="more players">+</button></div></div>
+            <div class="lrow" data-row="4"><span class="llabel">Bots</span>
+              <div class="stepper"><button class="stp" id="bot1Minus" aria-label="fewer bots">−</button><span class="stpv" id="bot1Val">1</span><button class="stp" id="bot1Plus" aria-label="more bots">+</button></div></div>
+            <div class="lrow" data-row="5"><span class="llabel">Bot skill</span>
+              <div class="seg lvlseg" id="lvlSeg1"><button class="sbtn" data-t="1" data-v="easy">Easy</button><button class="sbtn" data-t="1" data-v="medium">Medium</button><button class="sbtn" data-t="1" data-v="hard">Hard</button><button class="sbtn" data-t="1" data-v="pro">Pro</button></div></div>
+          </div>
+          <div class="summary" id="lobbySummary"></div>
+      </div>
+      <p class="lmsg" id="lobbyMsg"></p>
+      <div class="setuprow2">
+        <div class="lrow" data-row="6"><span class="llabel">Turn timer</span>
+          <div class="seg" id="timerSeg"><button class="sbtn" data-v="15">15s</button><button class="sbtn" data-v="30">30s</button><button class="sbtn" data-v="45">45s</button><button class="sbtn" data-v="60">60s</button><button class="sbtn" data-v="90">90s</button></div></div>
+        <div class="lrow viewrow" data-row="7"><span class="llabel">View <small>(V)</small></span>
+          <div class="seg" id="viewSeg"><button class="sbtn" data-v="3d">3D</button><button class="sbtn" data-v="2d">Classic 2D</button></div></div>
+      </div>
+      <p class="lmsg viewmsg" id="viewMsg"></p>
+      <div class="lrow col" data-row="8"><span class="llabel">World</span>
+        <div class="maprow" id="mapRow"></div></div>
+      <div class="navrow">
+        <button class="big alt navback" id="lobbyBack">◀ BACK</button>
+        <button class="qbtn" id="quickBtn">Quick Match: Me + bots</button>
+        <button class="qbtn" id="spectBtn">Spectate: bots only</button>
+        <button class="big" id="lobbyNext">NEXT: CHARACTERS ▶</button>
+      </div>
+      <p class="hint">↑ ↓ choose row · ← → change · Enter next · Esc back</p>
+    </div>
+
+    <!-- 3. page 2: characters (each human in turn, then the host picks the bots') -->
+    <div class="card screen hidden wide" id="scrChar" data-step="char">
+      <div class="stephead"><span class="stepno">STEP 2 / 2</span><h3 id="charTitle">PLAYER 1, PICK YOUR CHARACTER</h3><span class="stepsub" id="charSub">Pass the keyboard!</span></div>
+      <div class="pstrip" id="playerStrip"></div>
+      <div id="humanPick">
+        <div class="namerow"><label for="nameInput">Name</label><input id="nameInput" maxlength="12" autocomplete="off" spellcheck="false" placeholder="Player 1"></div>
+        <div class="cards" id="charCards"></div>
+      </div>
+      <div class="botpick" id="botPick"></div>
+      <div class="navrow">
+        <button class="big alt navback" id="charBack">◀ BACK</button>
+        <button class="big alt" id="charPick">PICK ▶</button>
+        <button id="startBtn" class="big">START ▶</button>
+      </div>
+      <p class="hint" id="charHint">← → choose · Enter pick · click a card to pick · Esc back to match setup</p>
+    </div>
+
+    <!-- online: create / join -->
+    <div class="card screen hidden" id="scrOnline" data-step="online">
+      <div class="stephead"><span class="stepno">ONLINE</span><h3>PLAY ONLINE</h3><span class="stepsub">up to 12 people (6 v 6), each in their own browser</span></div>
+      <p class="olnote hidden" id="olFileMsg">Online play needs the Shill Shock server. You opened the game straight from a file, which only supports local play.
+        Run <code>cd server &amp;&amp; npm install &amp;&amp; npm start</code> and open <code>http://localhost:8080</code>, or use the link of a deployed server (see DEPLOY.md).</p>
+      <div class="namerow"><label for="olName">Your name</label><input id="olName" maxlength="12" autocomplete="off" spellcheck="false" placeholder="Your name"></div>
+      <div class="olcols">
+        <div class="olcol"><h4>HOST A GAME</h4><p class="olsub">Get a room code and a link to share.</p><button id="olCreate" class="big">CREATE LOBBY</button></div>
+        <div class="olcol"><h4>JOIN A GAME</h4><p class="olsub">Enter the code from your host (or open their link).</p>
+          <div class="namerow"><label for="olCode">Code</label><input id="olCode" class="code" maxlength="4" autocomplete="off" spellcheck="false" placeholder="ABCD"></div>
+          <button id="olJoin" class="big">JOIN</button></div>
+      </div>
+      <p class="lmsg err olerr" id="olErr"></p>
+      <div class="navrow"><button class="big alt navback" id="olBack">◀ BACK</button><span></span></div>
+    </div>
+
+    <!-- online lobby (host + guests) -->
+    <div class="card screen hidden wide" id="scrOLobby" data-step="olobby">
+      <div class="stephead"><span class="stepno">ONLINE LOBBY</span><h3>ROOM <span id="olRoomCode">----</span></h3>
+        <span class="stepsub"><input id="olLink" class="ollink" readonly> <button class="qbtn" id="olCopy">Copy link</button></span></div>
+      <div class="olsettings" id="olSettings"></div>
+      <div class="olteams" id="olTeams"></div>
+      <div class="olbottom">
+        <div class="olpick"><span class="optlbl">YOUR CHARACTER</span><div class="opts" id="olPick"></div><p class="lmsg" id="olStatus"></p></div>
+        <div class="olchat" id="olChatLobby"></div>
+      </div>
+      <div class="navrow">
+        <button class="big alt navback" id="olLeave">◀ LEAVE</button>
+        <button class="big" id="olReady">READY</button>
+        <button class="big" id="olStart">START</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- online: in-game bar + chat -->
+  <div id="helpCtl" class="hidden"><div class="hpanel" id="helpPanel">
+    <button id="helpX" aria-label="Close help" title="Close (Esc)">✕</button>
+    <div class="hfoot"><label class="hnever"><input type="checkbox" id="helpNever"> Don't show again</label><button class="big" id="helpOk">GOT IT</button></div>
+  </div></div>
+  <button id="helpBtn" class="hidden" title="How to play (H)" aria-label="How to play">?</button>
+  <div id="netbar" class="hidden"><span id="netTurn"></span></div>
+  <div id="netchat" class="hidden"><div class="chatlog" id="chatLog"></div><input id="chatInput" maxlength="200" autocomplete="off" spellcheck="false" placeholder="T to chat · Enter to send"></div>
+
+  <div id="victory" class="overlay hidden">
+    <div class="card">
+      <h1 id="winTitle">WINNER</h1>
+      <canvas id="winArt" width="360" height="200"></canvas>
+      <p id="winSub" class="winsub"></p>
+      <p id="winQuip" class="quip"></p>
+      <div class="row">
+        <button id="rematchBtn" class="big">PLAY AGAIN</button>
+        <button id="menuBtn" class="big alt">MAIN MENU</button>
+        <button id="olBackBtn" class="big hidden">BACK TO LOBBY</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="js/terrain.js"></script>
+<script src="js/worlds.js"></script>
+<script src="js/characters.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/weapons.js"></script>
+<script src="js/game.js"></script>
+<script src="js/crates.js"></script>
+<script src="js/vendor/three.min.js"></script>
+<script src="js/r3d/base3d.js"></script>
+<script src="js/r3d/mascots3d.js"></script>
+<script src="js/r3d/terrain3d.js"></script>
+<script src="js/r3d/worlds3d.js"></script>
+<script src="js/r3d/fx3d.js"></script>
+<script src="js/r3d/render3d.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/main.js"></script>
+<script src="js/online.js"></script>
+<script src="js/touch.js"></script>
+</body>
+</html>

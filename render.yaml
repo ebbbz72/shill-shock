@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: shill-shock
+    runtime: node
+    plan: free
+    buildCommand: cd server && npm install
+    startCommand: cd server && npm start
+    healthCheckPath: /healthz
