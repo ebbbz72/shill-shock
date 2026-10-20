@@ -179,8 +179,10 @@ function buildStart(room) {
 }
 
 // ---------------- websocket ----------------
-const wss = new WebSocketServer({ server, maxPayload: 512 * 1024 });
-wss.on('connection', (ws) => {
+const wss = new WebSocketServer({ server, maxPayload: 512 * 1024, perMessageDeflate: false }); // no compression: small frames, no zlib delay
+function mergeSnap(base, d) { if (!d || !d.d) return d; if (!base) return null; const out = Object.assign({}, base, d); delete out.d; out.U = base.U.slice(); for (const k in d.U) out.U[+k] = d.U[k]; return out; }
+wss.on('connection', (ws, req) => {
+  if (req && req.socket && req.socket.setNoDelay) req.socket.setNoDelay(true); // no Nagle batching
   let room = null, me = null, budget = 400;
   ws.isAlive = true; ws.on('pong', () => { ws.isAlive = true; });
   const tick = setInterval(() => { budget = 400; }, 1000);
@@ -245,6 +247,7 @@ wss.on('connection', (ws) => {
         pushLobby(room);
         break;
       }
+      case 'ping': send(ws, { t: 'pong', c: m.c }); break;
       case 'chat': {
         const text = String(m.text || '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 200); if (!text) return;
         const c = { t: 'chat', name: me.name, text }; room.chat.push(c); if (room.chat.length > 40) room.chat.shift(); broadcast(room, c);
@@ -258,7 +261,7 @@ wss.on('connection', (ws) => {
       case 'snap': // host -> everyone else
         if (!room.inGame || me.pid !== room.hostPid || m.gameId !== room.start.gameId) return;
         if (Array.isArray(m.ev)) for (const e of m.ev) if (e && e[0] === 't') room.ops.push(e);
-        if (m.s) room.snap = m.s;
+        if (m.s && typeof m.s === 'object') room.snap = m.s.d ? (mergeSnap(room.snap, m.s) || room.snap) : m.s; // keep a full snapshot for rejoins
         broadcast(room, m, me.pid);
         break;
       case 'over':

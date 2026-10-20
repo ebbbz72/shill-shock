@@ -125,12 +125,13 @@
         break;
       case 'chat': addChat(m); break;
       case 'gamestart': startGame(m); break;
-      case 'snap': if (O.inGame && game.mirror && m.gameId === O.gameId) applySnap(m.s, m.ev, false); break;
+      case 'snap': if (O.inGame && game.mirror && m.gameId === O.gameId) onSnapMsg(m); break;
+      case 'pong': if (typeof m.c === 'number') { const r = performance.now() - m.c; if (r >= 0 && r < 5000) rtt = rtt * 0.7 + r * 0.3; O.rtt = rtt; } break;
       case 'input': if (O.inGame && O.isHost) onInput(m); break;
       case 'presence': onPresence(m); break;
       case 'host':
         O.hostPid = m.pid;
-        if (O.inGame && m.pid === O.pid && game.mirror) promote();
+        if (O.inGame && m.pid === O.pid && game.mirror) { flushSnaps(); promote(); }
         break;
       case 'over': onOver(m); break;
     }
@@ -278,12 +279,38 @@
   // ---------------------------------------------------------------- game start (host + mirrors)
   let hostTimer = null, worker = null, events = [], remoteKeys = {}, walls = new Map();
   let wallSeq = 0, projSeq = 0, hopSeq = 0, lastBanner = null, lastQuip = null, lastCur = null, inFx = 0, firstSnap = true;
+  // ---- netcode: mirrors render INTERP_MS behind the host from a snapshot buffer and interpolate between snapshots;
+  // the active guest predicts their own aim / walk / power locally and reconciles with the host after a grace time
+  const INTERP_MS = 100, KEYFRAME_EVERY = 20;
+  let netBase = null, sbuf = [], applied = null, offWin = [], clockOff = 0, rtt = 150;
+  let sentFull = null, sinceKey = 0, lastUJ = [], lastXJ = {};
+  const pred = { aimT: -1e9, walkT: -1e9, chargeT: -1e9, charging: false, fell: false, blendT: -1e9, tc: -1, walkAcc: 0 };
+  const grace = () => rtt + INTERP_MS + 150;
+  function mergeSnap(base, d) { // delta snapshot (d:1, U = {index: unit}) on top of the last full one
+    if (!d || !d.d) return d; if (!base) return null;
+    const out = Object.assign({}, base, d); delete out.d; out.U = base.U.slice();
+    for (const k in d.U) out.U[+k] = d.U[k]; return out;
+  }
+  function resetNet() { netBase = null; sbuf = []; applied = null; offWin = []; sentFull = null; sinceKey = 0; lastUJ = []; lastXJ = {}; Object.assign(pred, { aimT: -1e9, walkT: -1e9, chargeT: -1e9, charging: false, fell: false, blendT: -1e9, tc: -1 }); }
+  function onSnapMsg(m) {
+    const full = mergeSnap(netBase, m.s); if (!full) return; netBase = full; O.lastSnap = full;
+    if (m.ts == null || firstSnap) { flushSnaps(); applySnap(full, m.ev, false); applied = null; return; }
+    const now = performance.now();
+    if (sbuf.length && m.ts < sbuf[sbuf.length - 1].ts) { flushSnaps(); offWin = []; } // new host clock (host migrated)
+    offWin.push([now, now - m.ts]); while (offWin.length > 1 && now - offWin[0][0] > 4000) offWin.shift();
+    clockOff = Math.min(...offWin.map(x => x[1])); // least-delayed arrival = best estimate of the clock offset
+    sbuf.push({ ts: m.ts, s: full, ev: m.ev });
+  }
+  function flushSnaps() { while (sbuf.length) { const b = sbuf.shift(); applySnap(b.s, b.ev, false); applied = b; } }
+  O.flushSnaps = flushSnaps;
+  const mine = u => !!u && u === game.cur && myTurn();
+  const predPos = u => mine(u) && !pred.fell && performance.now() - pred.walkT < grace();
   const mainOnOver = game.onGameOver;
 
   function startGame(m) {
     if (O.inGame) teardownGame();
     O.inGame = true; O.start = m.start; O.gameId = m.start.gameId; O.hostPid = m.hostPid; O.isHost = m.hostPid === O.pid;
-    O.lastDigest = null; O.hostDigest = null; O.snaps = 0; O.overSent = false; firstSnap = true;
+    O.lastDigest = null; O.hostDigest = null; O.snaps = 0; O.overSent = false; firstSnap = true; resetNet();
     events = []; remoteKeys = {}; walls = new Map(); wallSeq = 0; projSeq = 0; hopSeq = 0; lastBanner = lastQuip = lastCur = null;
     M.hideMenu(); SFX.unlock();
     $('olBackBtn').classList.add('hidden'); $('rematchBtn').classList.remove('hidden'); $('menuBtn').classList.remove('hidden');
@@ -297,7 +324,7 @@
     markAway();
     if (game.mirror) {
       for (const e of m.ops || []) applyEvent(e, true);
-      if (m.snap) applySnap(m.snap, [], true);
+      if (m.snap) { netBase = m.snap; O.lastSnap = m.snap; applySnap(m.snap, [], true); }
       game.banner = null;
       if (m.rejoin) localToast('rejoined the game');
     } else hostSetup();
@@ -346,12 +373,12 @@
       if (!O.inGame || !O.isHost || O.overSent) return;
       // background tab: rAF stops, so keep the authoritative sim running from this timer
       if (document.hidden && !game.externalStep) game.update(SNAP_MS / 1000 * 0.66);
-      const now = performance.now(); if (now - last >= SNAP_MS - 5) { last = now; sendSnap(); }
+      const now = performance.now(); if (now - last >= SNAP_MS - 4) { last = now - last < SNAP_MS * 2 ? last + SNAP_MS : now; sendSnap(); } // steady 20 Hz
     };
     try { // worker timers are not throttled like page timers in background tabs
-      worker = new Worker(URL.createObjectURL(new Blob(['setInterval(function(){postMessage(0)},33)'], { type: 'text/javascript' })));
+      worker = new Worker(URL.createObjectURL(new Blob(['setInterval(function(){postMessage(0)},10)'], { type: 'text/javascript' })));
       worker.onmessage = tick;
-    } catch (e) { worker = null; hostTimer = setInterval(tick, 33); }
+    } catch (e) { worker = null; hostTimer = setInterval(tick, 10); }
   }
   // SFX that aren't part of an fx replay are forwarded as events
   ['shoot', 'bounce', 'ribbit', 'jump', 'select'].forEach(n => {
@@ -382,7 +409,14 @@
   }
   function sendSnap() {
     const s = buildSnap(), ev = events; events = [];
-    send({ t: 'snap', gameId: O.gameId, ev, s });
+    // compact: only units whose state changed + changed team/crate/queue lists; a full keyframe every second
+    let out = s;
+    const key = !sentFull || ++sinceKey >= KEYFRAME_EVERY;
+    if (key) sinceKey = 0; else { out = { d: 1, U: {} }; for (const k in s) if (k !== 'U') out[k] = s[k]; }
+    s.U.forEach((a, i) => { const j = JSON.stringify(a); if (!key && j !== lastUJ[i]) out.U[i] = a; lastUJ[i] = j; });
+    for (const k of ['T', 'C', 'pl']) { const j = JSON.stringify(s[k]); if (!key && j === lastXJ[k]) delete out[k]; lastXJ[k] = j; }
+    sentFull = s;
+    send({ t: 'snap', gameId: O.gameId, ts: Math.round(performance.now() * 10) / 10, ev, s: out });
     O.snaps++; O.lastSnap = s;
   }
   function onInput(m) {
@@ -427,7 +461,7 @@
       if (u._tx != null) { u.x = u._tx; u.y = u._ty; u._tx = u._ty = null; }
       u.vx = 0; u.vy = 0; u.hop = null; u.onGround = !u.dead;
     }
-    g.projectiles = [];
+    g.projectiles = []; sentFull = null; offWin = [];
     for (const id of walls.keys()) wallSeq = Math.max(wallSeq, id);
     projSeq += 100000; hopSeq += 100000;
     hookTerrain(g.terrain);
@@ -467,11 +501,11 @@
     const g = game;
     for (const e of ev || []) applyEvent(e, silent);
     if (!s) return;
-    O.snaps++; O.lastSnap = s;
+    O.snaps++; if (!O.lastSnap) O.lastSnap = s;
     if (g.state !== 'over') g.state = s.st === 'over' ? 'play' : s.st; // 'over' comes with the over message
     if (s.ph !== g.phase || Math.abs((g.timer || 0) - s.ti) > 0.35) g.timer = s.ti;
     g.phase = s.ph === 'over' ? 'settle' : s.ph; g.turnTeam = s.tt; g.cur = g.units[s.cu] || null;
-    g.jumpsLeft = s.jl; if (s.wk != null) g.walkLeft = s.wk; g.jumpCharge = s.jc && g.cur ? { u: g.cur, back: !!s.jc[1], p: s.jc[0] } : null; g.power = s.po; g.charging = !!s.ch; g.wind = s.wi; g.turnCount = s.tc; if (s.rd) { g.round = s.rd; g.played = new Set((s.pl || []).map(k => g.units[k]).filter(Boolean)); }
+    g.jumpsLeft = s.jl; if (s.wk != null && !predPos(g.cur)) g.walkLeft = s.wk; g.jumpCharge = s.jc && g.cur ? { u: g.cur, back: !!s.jc[1], p: s.jc[0] } : null; if (!(pred.charging || performance.now() - pred.chargeT < grace()) || !myTurn()) { g.power = s.po; g.charging = !!s.ch; } g.wind = s.wi; g.turnCount = s.tc; if (s.rd) { g.round = s.rd; g.played = new Set((s.pl || []).map(k => g.units[k]).filter(Boolean)); }
     if (s.C) { // crates: keep the objects (the 3D view keys its meshes on them)
       const old = new Map((g.crates || []).map(c => [c.id, c]));
       g.crates = s.C.map(([id, x, y, para, landed]) => { const c = old.get(id) || { id, sway: (id * 1.7) % 6 }; c.x = x; c.y = y; c.para = !!para; c.landed = !!landed; return c; });
@@ -479,10 +513,11 @@
     s.T.forEach((a, i) => { const t = g.teams[i]; if (!t) return; t.weaponIdx = a[0]; t.unitIdx = a[3]; const cu = t.units[a[3]]; if (cu) { t.weapons = cu.weapons; t.ammo = cu.ammo; } t.controller = a[4]; t.player = a[5]; });
     s.U.forEach((a, i) => {
       const u = g.units[i]; if (!u) return;
+      const pp = predPos(u), now = performance.now(), pa = mine(u) && now - pred.aimT < grace();
       const snapPos = firstSnap || silent || u._tx == null || Math.abs(a[0] - u.x) > 160 || Math.abs(a[1] - u.y) > 160;
-      u._tx = a[0]; u._ty = a[1]; if (snapPos) { u.x = a[0]; u.y = a[1]; }
-      u.hp = a[2]; u.dead = !!(a[3] & 1); u.drowned = !!(a[3] & 2); u.onGround = !!(a[3] & 4); u.away = !!(a[3] & 8);
-      u.facing = a[4]; u.aim = a[5]; u.vx = a[8]; u.vy = a[9]; u.jumpId = a[10] || 0; u.jumpK = a[11] || 0; if (a[13] != null) u.jumpP = a[13];
+      u._tx = a[0]; u._ty = a[1]; if (snapPos && !pp) { u.x = a[0]; u.y = a[1]; }
+      u.hp = a[2]; u.dead = !!(a[3] & 1); u.drowned = !!(a[3] & 2); if (!pp) u.onGround = !!(a[3] & 4); u.away = !!(a[3] & 8);
+      if (!pp && !pa) u.facing = a[4]; if (!pa) u.aim = a[5]; u.vx = a[8]; u.vy = a[9]; u.jumpId = a[10] || 0; u.jumpK = a[11] || 0; if (a[13] != null) u.jumpP = a[13];
       const ca = a[12];
       if (ca) {
         if (ca[0] !== u.char) { const cd = TEAM_DEFS.find(x => x.id === ca[0]); if (cd) { u.char = cd.id; u.def0 = cd; u.weapons = ['bazooka', 'grenade', cd.sig, 'brace', cd.sigDef]; u.ammo = { [cd.sig]: 0, [cd.sigDef]: 0 }; } }
@@ -523,17 +558,34 @@
     this.updateCamera(dt);
     if (this.banner) { this.banner.t -= dt; if (this.banner.t <= 0) this.banner = null; }
     if (this.bigQuip) { this.bigQuip.t -= dt; if (this.bigQuip.t <= 0) this.bigQuip = null; }
-    const k = 1 - Math.exp(-dt * 18);
-    for (const u of this.units) {
-      if (u._tx == null) continue;
-      const dx = u._tx - u.x; u.x += dx * k; u.y += (u._ty - u.y) * k;
-      if (u.onGround && Math.abs(dx) > 0.05) u.walkAnim += dt * 12;
+    const now = performance.now(), rt = now - clockOff - INTERP_MS;
+    if (sbuf.length > 1 && sbuf[sbuf.length - 1].ts - rt > 600) while (sbuf.length > 1) { const b = sbuf.shift(); applySnap(b.s, b.ev, false); applied = b; } // far behind (hidden tab): catch up
+    while (sbuf.length && sbuf[0].ts <= rt) { const b = sbuf.shift(); applySnap(b.s, b.ev, false); applied = b; }
+    predictMine(this, dt, now);
+    const A = applied, B = sbuf[0], f = A && B ? clamp((rt - A.ts) / Math.max(1, B.ts - A.ts), 0, 1) : 0, xt = A ? Math.min(0.25, Math.max(0, rt - A.ts) / 1000) : 0;
+    const kb = 1 - Math.exp(-dt * 12);
+    this.units.forEach((u, i) => {
+      if (u._tx == null) return;
+      let tx = u._tx, ty = u._ty;
+      if (A) { const a = A.s.U[i], b = B && B.s.U[i]; if (a) { tx = a[0]; ty = a[1]; if (b && Math.abs(b[0] - a[0]) < 160 && Math.abs(b[1] - a[1]) < 160) { tx += (b[0] - a[0]) * f; ty += (b[1] - a[1]) * f; } } }
+      if (predPos(u)) { pred.wasPred = true; return; } // my own walking: local prediction
+      if (mine(u) && pred.wasPred) { pred.wasPred = false; pred.blendT = now; }
+      const ox = u.x;
+      if (!A) { const k = 1 - Math.exp(-dt * 18); u.x += (tx - u.x) * k; u.y += (ty - u.y) * k; }
+      else if (mine(u) && now - pred.blendT < 400) { u.x += (tx - u.x) * kb; u.y += (ty - u.y) * kb; } // prediction ended: ease onto the host's position
+      else { u.x = tx; u.y = ty; }
+      if (u.onGround && Math.abs(u.x - ox) > 0.05) u.walkAnim += dt * 12;
       if (u.hop) u.hop.t = Math.min(u.hop.dur, u.hop.t + dt);
-    }
+    });
+    const Bp = B ? new Map(B.s.P.map(a => [a[0], a])) : null, Ap = A ? new Map(A.s.P.map(a => [a[0], a])) : null;
     for (const p of this.projectiles) {
       const w = p.w; p.age += dt;
-      p.vx += this.wind * WIND_ACC * (w.wind || 0) * dt; p.vy += GRAV * (w.grav || 1) * dt;
-      p.x += p.vx * dt; p.y += p.vy * dt;
+      const a = Ap && Ap.get(p.nid), b = Bp && Bp.get(p.nid);
+      if (a && b) { p.x = a[2] + (b[2] - a[2]) * f; p.y = a[3] + (b[3] - a[3]) * f; p.vx = a[4] + (b[4] - a[4]) * f; p.vy = a[5] + (b[5] - a[5]) * f; }
+      else if (a) { // no newer snapshot for it (yet): ballistic extrapolation from the last one
+        const ax = this.wind * WIND_ACC * (w.wind || 0), ay = GRAV * (w.grav || 1);
+        p.x = a[2] + a[4] * xt + 0.5 * ax * xt * xt; p.y = a[3] + a[5] * xt + 0.5 * ay * xt * xt; p.vx = a[4] + ax * xt; p.vy = a[5] + ay * xt;
+      } else { p.vx += this.wind * WIND_ACC * (w.wind || 0) * dt; p.vy += GRAV * (w.grav || 1) * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
       if (w.kind === 'bounce') { p.spin += p.vx * dt * 0.08; p.fuse -= dt; }
       p.trailT -= dt;
       if (p.trailT <= 0) {
@@ -549,6 +601,25 @@
     }
   };
 
+  // the active guest's own inputs show at once: aim (sent to the host as an angle), walking, fire power
+  function predictMine(g, dt, now) {
+    const u = g.cur;
+    if (!myTurn() || g.phase !== 'aim' || !u || u.dead) { pred.charging = false; pred.walkAcc = 0; return; }
+    if (pred.tc !== g.turnCount) { pred.tc = g.turnCount; aimLast = null; pred.fell = false; pred.walkT = pred.aimT = pred.chargeT = -1e9; }
+    const K = g.keys, up = !!K['ArrowUp'], dn = !!K['ArrowDown'];
+    if (up !== dn) { u.aim = clamp(u.aim + (up ? 70 : -70) * dt, -88, 88); O.sendAim(u.aim, u.facing); }
+    const L = !!K['ArrowLeft'], R = !!K['ArrowRight'];
+    if (L !== R && !pred.charging && !g.charging && !g.jumpCharge && !pred.fell) {
+      const dir = L ? -1 : 1; u.facing = dir; pred.walkT = now;
+      if (u.onGround) {
+        pred.walkAcc += WALK_SPEED * dt;
+        while (pred.walkAcc >= 1) { pred.walkAcc--; if (!g.walkStep(u, dir)) { pred.walkAcc = 0; break; } if (!u.onGround) { pred.fell = true; break; } }
+        u.walkAnim += dt * 12;
+      } else pred.fell = true;
+    } else pred.walkAcc = 0;
+    if (pred.charging) { g.charging = true; g.power = Math.min(1, g.power + dt / CHARGE_TIME); pred.chargeT = now; if (g.power >= 1) { pred.charging = false; g.charging = false; } }
+  }
+
   // ---------------------------------------------------------------- game over
   function digest(s) { // same on every client: final units + winner + terrain mask hash
     if (!s) return null;
@@ -560,6 +631,7 @@
     if (!O.inGame) return;
     O.hostDigest = m.digest;
     if (game.mirror) {
+      flushSnaps();
       if (O.lastSnap) O.lastSnap.wn = m.winner;
       O.lastDigest = digest(O.lastSnap);
       for (const u of game.units) if (u._tx != null) { u.x = u._tx; u.y = u._ty; }
@@ -588,13 +660,17 @@
     if (!O.inGame || !game.mirror || e.target.tagName === 'INPUT' || e.repeat) return;
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (!RELAY.has(k) || !myTurn() || e.__ssConsumed) return; // a key that only closed the local help is never sent to the host
+    if (k === 'ArrowUp' || k === 'ArrowDown') return; // aim: predicted locally, sent as an angle (predictMine)
+    if (k === ' ' && game.phase === 'aim' && !game.jumpCharge) { const t = game.teams[game.turnTeam]; if ((WEAPONS[t.weapons[t.weaponIdx]] || {}).kind !== 'defense') { pred.charging = true; game.power = 0; game.charging = true; } }
     held.add(k); send({ t: 'input', k, d: true });
   });
   window.addEventListener('keyup', e => {
     if (!O.inGame || !game.mirror) return;
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (k === ' ' && pred.charging) { pred.charging = false; game.charging = false; pred.chargeT = performance.now(); }
     if (held.delete(k)) send({ t: 'input', k, d: false });
   });
+  setInterval(() => { if (O.inGame && game.mirror) send({ t: 'ping', c: performance.now() }); }, 2000); // RTT for the prediction grace time
   window.addEventListener('blur', () => { for (const k of held) send({ t: 'input', k, d: false }); held.clear(); });
   function myTurn() { const u = game.cur; return !!u && u.pid === O.pid && !u.away && game.state === 'play'; }
   O.myTurn = myTurn;
@@ -602,6 +678,7 @@
   O.sendAim = (a, f) => { // touch guest: relay the aim angle (throttled); the host checks it's this player's turn
     if (!O.inGame || !game.mirror || !myTurn()) return false;
     const now = performance.now(), v = Math.round(a * 10) / 10;
+    const u = game.cur; u.aim = clamp(a, -88, 88); if (f === 1 || f === -1) u.facing = f; pred.aimT = now; // show it at once (prediction)
     if (aimLast && aimLast[0] === v && aimLast[1] === f) return true;
     if (now - aimT < 45) { O._aimPending = [v, f]; return true; }
     aimT = now; aimLast = [v, f]; O._aimPending = null; send({ t: 'input', k: 'aim', d: true, a: v, f }); return true;
